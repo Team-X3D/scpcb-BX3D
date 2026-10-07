@@ -49,9 +49,9 @@ Function RenderEffectQuad(effect%, buffer%, technique$, blend% = 0)
 	ShowEntity(PostEffectQuad)
 	EntityBlend(PostEffectQuad, blend)
 	SetBuffer(buffer)
-	EffectTechnique(effect, technique)
+	;EffectTechnique(effect, technique)
 	CameraViewport(QuadCamera, 0, 0, GraphicWidth, GraphicHeight)
-	RenderEntity(QuadCamera, PostEffectQuad)
+	RenderEntity(PostEffectQuad, QuadCamera)
 	HideEntity(PostEffectQuad)
 End Function
 
@@ -65,6 +65,6 @@ End Function
 
 Function SetQuadEffect(effect%)
 	if PostEffect = effect Then Return
-	EntityEffect PostEffectQuad, effect
+	SetEntityEffect PostEffectQuad, effect
 	PostEffect = effect
 End Function
