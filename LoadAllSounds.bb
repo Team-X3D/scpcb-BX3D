@@ -13,11 +13,7 @@ For i = 0 To 1
 	CloseDoorSFX(1,i) = LoadSound_Strict("SFX\Door\BigDoorClose" + (i + 1) + ".ogg")
 Next
 
-KeyCardSFX1 = LoadSound_Strict("SFX\Interact\KeyCardUse1.ogg")
-KeyCardSFX2 = LoadSound_Strict("SFX\Interact\KeyCardUse2.ogg")
 ButtonSFX2 = LoadSound_Strict("SFX\Interact\Button2.ogg")
-ScannerSFX1 = LoadSound_Strict("SFX\Interact\ScannerUse1.ogg")
-ScannerSFX2 = LoadSound_Strict("SFX\Interact\ScannerUse2.ogg")
 
 OpenDoorFastSFX=LoadSound_Strict("SFX\Door\DoorOpenFast.ogg")
 CautionSFX% = LoadSound_Strict("SFX\Room\LockroomSiren.ogg")

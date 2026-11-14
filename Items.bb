@@ -1,4 +1,3 @@
-Global BurntNote%
 
 Const MaxItemAmount% = 10
 Global ItemAmount%
@@ -97,7 +96,7 @@ Function CreateItemTemplate.ItemTemplates(name$, group$, displayname$, objpath$,
 	;	
 	;	;DebugLog imgpath
 	;	
-	;	If it\img<>0 Then ScaleImage(it\img, MenuScale, MenuScale)
+	;	If it\img<>0 Then ScaleImage(it\img, UIScale, UIScale)
 	;EndIf
 	
 	it\group = group
@@ -276,7 +275,6 @@ Type Items
 	Field Inventory.Inventories
 	Field ID%
 
-	Field drinkName$
 End Type 
 
 Function CreateItem.Items(name$, x#, y#, z#)
@@ -310,19 +308,6 @@ Function CreateItem.Items(name$, x#, y#, z#)
 	i\DropSpeed = 0.0
 	
 	i\invimg = i\itemtemplate\invimg
-	If name="clipboard" Then
-		i\Inventory = New Inventories
-		i\Inventory\Size = 10
-		SetAnimTime i\model,17.0
-		i\invimg = i\itemtemplate\invimg2
-	ElseIf name="wallet" Then
-		i\Inventory = New Inventories
-		i\Inventory\Size = 10
-		SetAnimTime i\model,0.0
-	ElseIf name="scp330" then
-		i\state = 1 Shl Rand(0, 2)
-		SetAnimTime i\model, i\state + 1
-	EndIf
 	
 	i\ID=LastItemID+1
 	LastItemID=i\ID
@@ -330,116 +315,6 @@ Function CreateItem.Items(name$, x#, y#, z#)
 	EntityType(i\collider, HIT_ITEM)
 	
 	CatchErrors("CreateItem")
-	Return i
-End Function
-
-Const SCP294Data$ = "DATA\SCP-294.ini"
-
-; Returns channel of dispense sound if successful
-Function CreateCup%(drinkName$, x#, y#, z#)
-	drinkName = Trim(Lower(drinkName))
-	For i = 1 To 2
-		Local prefix$ = I_Loc\Cup_OfPrefix[i] + " "
-		If Left(drinkName, Min(Len(prefix),Len(drinkName))) = prefix Then
-			drinkName = Right(drinkName, Len(drinkName)-Len(prefix))
-		EndIf
-	Next
-	
-	Local iniStr$ = SCP294Data
-	Local loc% = -1
-	Local hasOverride%
-	If drinkName<>""
-		For m.ActiveMods = Each ActiveMods
-			Local modIniStr$ = m\Path + iniStr
-			If FileType(modIniStr) = 1 Then
-				Local sectionLocation = GetINISectionLocation(modIniStr, drinkName)
-				If sectionLocation <> -1 Then
-					iniStr = modIniStr
-					loc = sectionLocation
-					Exit
-				EndIf
-				If FileType(modIniStr + ".OVERRIDE") Then
-					hasOverride = True
-					Exit
-				EndIf
-			EndIf
-		Next
-
-		If loc = -1 And (Not hasOverride) Then
-			loc = GetINISectionLocation(iniStr, drinkName)
-		EndIf
-	EndIf
-	
-	If loc <> -1 Then
-		Local chn% = 0
-
-		strtemp$ = GetINIString2(iniStr, loc, "dispensesound")
-		If strtemp = "" Then strtemp = GetINIString2(iniStr, loc, "dispensersound")
-		If strtemp<>"" Then
-			chn = PlaySound_Strict (LoadTempSound(strtemp))
-		EndIf
-		If chn=0 Then
-			chn = PlaySound_Strict (LoadTempSound("SFX\SCP\294\dispense1.ogg"))
-		EndIf
-		
-		If GetINIInt2(iniStr, loc, "explosion")=True Then 
-			ExplosionTimer = 135
-			DeathMSG = GetINIString2(iniStr, loc, "deathmessage")
-		EndIf
-		
-		strtemp$ = GetINIString2(iniStr, loc, "color")
-		
-		Local sep1 = Instr(strtemp, ",", 1)
-		Local sep2 = Instr(strtemp, ",", sep1+1)
-		Local r% = Trim(Left(strtemp, sep1-1))
-		Local g% = Trim(Mid(strtemp, sep1+1, sep2-sep1-1))
-		Local b% = Trim(Right(strtemp, Len(strtemp)-sep2))
-		
-		Local alpha# = Float(GetINIString2(iniStr, loc, "alpha",1.0))
-		Local glow = GetINIInt2(iniStr, loc, "glow")
-		;If alpha = 0 Then alpha = 1.0
-		If glow Then alpha = -alpha
-		
-		CreateCup(GetProperINISectionName(iniStr, loc, drinkName), x, y, z, r,g,b,alpha)
-		
-		Return chn
-	Else
-		;out of range
-		Return 0
-	EndIf
-End Function
-
-Function CreateCup.Items(drinkName$, x#, y#, z#, r%, g%, b%, a#=1.0)
-	CatchErrors("Uncaught (CreateCup)")
-
-	Local i.Items = CreateItem("cup", x, y, z)
-
-	i\drinkName = drinkName
-	i\displayname = Format(I_Loc\Cup_Of, drinkName)
-
-	i\state = 1.0
-		
-	i\r=r
-	i\g=g
-	i\b=b
-	i\a=a
-	
-	Local liquid = CopyEntity(LiquidObj)
-	ScaleEntity liquid, i\itemtemplate\scale,i\itemtemplate\scale,i\itemtemplate\scale,True
-	PositionEntity liquid, EntityX(i\collider,True),EntityY(i\collider,True),EntityZ(i\collider,True)
-	EntityParent liquid, i\model
-	EntityColor liquid, r,g,b
-	
-	If a < 0 Then 
-		EntityFX liquid, 1
-		EntityAlpha liquid, Abs(a)
-	Else
-		EntityAlpha liquid, Abs(a)
-	EndIf
-	
-	EntityShininess liquid, 1.0
-	
-	CatchErrors("CreateCup")
 	Return i
 End Function
 
@@ -458,24 +333,6 @@ Function RemoveItem(i.Items, inGame%=True)
 			EndIf
 		Next
 		
-		Select i\itemtemplate\name 
-			Case "nvgoggles", "finenvgoggles", "supernv"
-				WearingNightVision = False
-			Case "gasmask", "supergasmask", "gasmask2", "gasmask3"
-				WearingGasMask = False
-			Case "vest", "finevest", "veryfinevest"
-				WearingVest = False
-			Case "hazmatsuit","hazmatsuit2","hazmatsuit3"
-				WearingHazmat = False	
-			Case "scp714"
-				Wearing714 = False
-			Case "scp1499","super1499"
-				Wearing1499 = False
-			Case "scp427"
-				I_427\Using = False
-			Case "pumpkin"
-				TakeOffPumpkin()
-		End Select
 	EndIf
 	If i\itemtemplate\img <> 0
 		FreeImageHUDScaled i\itemtemplate\img
@@ -490,55 +347,42 @@ End Function
 
 Function UpdateItems()
 	CatchErrors("Uncaught (UpdateItems)")
-	Local n, i.Items, i2.Items
+	Local i.Items, i2.Items
 	Local xtemp#, ytemp#, ztemp#
-	Local temp%, np.NPCs
 	Local pick%
-	
-	Local HideDist = HideDistance*0.5
-	
+
+	Local HideDist# = HideDistance*0.5
+
 	ClosestItem = Null
 	For i.Items = Each Items
-		CatchErrors("Uncaught (UpdateItem "+i\itemtemplate\name+")")
-		
 		i\Dropped = 0
-		
+
 		If (Not i\Picked) Then
 			If i\disttimer < MilliSecs() Then
 				i\dist = EntityDistance(Camera, i\collider)
 				i\disttimer = MilliSecs() + 700
 			EndIf
-			
-			If i\dist < HideDist Then
-				; ShowEntity resets the collisions.
-				Local hasCollided% = EntityCollided(i\collider, HIT_MAP)
 
+			If i\dist < HideDist Then
+				Local hasCollided% = EntityCollided(i\collider, HIT_MAP)
 				ShowEntity i\collider
-				
+
 				If i\dist < 1.2 Then
 					If ClosestItem = Null Then
-						If EntityInView(i\model, Camera) Then
-							If EntityVisible(i\collider,Camera) Then
-								ClosestItem = i
-							EndIf
-						EndIf
-					ElseIf ClosestItem = i Or i\dist < EntityDistance(Camera, ClosestItem\collider) Then 
-						If EntityInView(i\model, Camera) Then
-							If EntityVisible(i\collider,Camera) Then
-								ClosestItem = i
-							EndIf
-						EndIf
+						If EntityInView(i\model, Camera) And EntityVisible(i\collider,Camera) Then ClosestItem = i
+					ElseIf i\dist < EntityDistance(Camera, ClosestItem\collider) Then
+						If EntityInView(i\model, Camera) And EntityVisible(i\collider,Camera) Then ClosestItem = i
 					EndIf
 				EndIf
-				
+
 				If hasCollided Then
 					i\DropSpeed = 0
 					i\xspeed = 0.0
 					i\zspeed = 0.0
 				Else
-					If ShouldEntitiesFall
+					If ShouldEntitiesFall Then
 						pick = LinePick(EntityX(i\collider, True),EntityY(i\collider, True),EntityZ(i\collider, True),0,-10,0)
-						If pick
+						If pick Then
 							i\DropSpeed = i\DropSpeed - 0.0004 * FPSfactor
 							TranslateEntity i\collider, i\xspeed*FPSfactor, i\DropSpeed * FPSfactor, i\zspeed*FPSfactor, True
 						Else
@@ -552,36 +396,29 @@ Function UpdateItems()
 						i\zspeed = 0.0
 					EndIf
 				EndIf
-				
-				If i\dist<HideDist*0.2 Then
+
+				If i\dist < HideDist*0.2 Then
 					For i2.Items = Each Items
-						If i<>i2 And (Not i2\Picked) And i2\dist<HideDist*0.2 Then
-							
+						If i<>i2 And (Not i2\Picked) And i2\dist < HideDist*0.2 Then
 							xtemp# = (EntityX(i2\collider,True)-EntityX(i\collider,True))
 							ytemp# = (EntityY(i2\collider,True)-EntityY(i\collider,True))
 							ztemp# = (EntityZ(i2\collider,True)-EntityZ(i\collider,True))
-							
 							Local ed# = (xtemp*xtemp+ztemp*ztemp)
-							If ed<0.07 And Abs(ytemp)<0.25 Then
-								;items are too close together, push away
-								If PlayerRoom\RoomTemplate\Name	<> "room2storage" Then
-									xtemp = xtemp*(0.07-ed)
-									ztemp = ztemp*(0.07-ed)
-									
-									While Abs(xtemp)+Abs(ztemp)<0.001
-										xtemp = xtemp+Rnd(-0.002,0.002)
-										ztemp = ztemp+Rnd(-0.002,0.002)
-									Wend
-									
-									TranslateEntity i2\collider,xtemp,0,ztemp,True
-									TranslateEntity i\collider,-xtemp,0,-ztemp,True
-								EndIf
+							If ed < 0.07 And Abs(ytemp) < 0.25 Then
+								xtemp = xtemp*(0.07-ed)
+								ztemp = ztemp*(0.07-ed)
+								While Abs(xtemp)+Abs(ztemp) < 0.001
+									xtemp = xtemp+Rnd(-0.002,0.002)
+									ztemp = ztemp+Rnd(-0.002,0.002)
+								Wend
+								TranslateEntity i2\collider,xtemp,0,ztemp,True
+								TranslateEntity i\collider,-xtemp,0,-ztemp,True
 							EndIf
 						EndIf
 					Next
 				EndIf
-				
-				If EntityY(i\collider, True) < - 35.0 Then RemoveItem(i) : Continue
+
+				If EntityY(i\collider, True) < -35.0 Then RemoveItem(i) : Continue
 			Else
 				HideEntity i\collider
 			EndIf
@@ -590,605 +427,36 @@ Function UpdateItems()
 			i\xspeed = 0.0
 			i\zspeed = 0.0
 		EndIf
-		
-		Select i\itemtemplate\name
-			Case "lollipop"
-				If i\state > 0 Then
-					i\state = i\state + FPSfactor
-
-					If Rand(50/FPSfactor) = 1
-						CameraShake = Max(CameraShake, Rnd(0.01 * i\state, 0.05 * i\state))
-						If (MilliSecs() Mod 1000) < 100 Then PlaySound_Strict(CoughSFX(Rand(0,2)))
-					EndIf
-
-					If i\state > 70 * 10 Then BlurTimer = Max(BlurTimer, 1400)
-
-					If (Not CanTeleportToHalloweenRoom()) Then
-						RemoveItem(i)
-					ElseIf i\state > 70 * 15 Then
-						Local r.Rooms = Null
-						For e.Events = Each Events
-							If e\EventName = "halloweenfields" Then
-								r = e\room
-								Teleport(r)
-								Exit
-							EndIf
-						Next
-
-						If r = Null Then
-							For r2.Rooms = Each Rooms
-								If r2\RoomTemplate\Name = "halloweenfields" Then
-									r = r2
-									Teleport(r)
-									CreateEvent("halloweenfields","halloweenfields",0)
-									FillHalloweenPDWithBones(r)
-									Exit
-								EndIf
-							Next
-						EndIf
-
-						If r = Null Then
-							r = CreateRoom(0, ROOM1, 0, 1000, 128, 0, "halloweenfields")
-							SetupTriggerBoxes(r)
-							Teleport(r)
-							CreateEvent("halloweenfields","halloweenfields",0)
-						EndIf
-						PositionEntity(Collider, r\x + 8, r\y + 0.5, r\z + 14)
-						RotateEntity(Collider, 0, -80, 0)
-						ResetEntity(Collider)
-
-						Local it.Items = CreateItem("pumpkin", r\x - 14.7, r\y + 0.5, r\z + 5.0)
-						it\State = -1
-						RotateEntity(it\collider, 0, r\angle-50, 0)
-
-						LightVolume = -0.1
-
-						BlinkTimer = -10
-
-						BlurTimer = Max(BlurTimer, 5 * 70)
-						PlaySound_Strict(CoughSFX(Rand(0,2)))
-						PlaySound_Strict(LoadTempSound("SFX\Halloween\LollipopTeleport.ogg"))
-
-						RemoveItem(i)
-					EndIf
-				EndIf
-			Case "chocolate"
-				If i\state > 0 Then
-					CurrStepSFX = 1
-
-					If i\state > 35 * 15 Then
-						CrouchState = (i\state - 35 * 15) / (35 * 15)
-					EndIf
-
-					If i\state > 70 * 13 Then
-						LightBlink = (i\State - 70 * 13) / 70 * 2
-					EndIf
-
-					If PlayerStepped Then
-						de.Decals = CreateDecal(0, EntityX(Collider),EntityY(Collider)-0.29,EntityZ(Collider), 90, Rand(360), 0)
-						de\Size = 0.2 : de\SizeChange = 0.004 : de\timer = 90000 : EntityAlpha(de\obj, 0.8) : UpdateDecals() 											
-					EndIf
-					i\state = i\state + FPSfactor
-					BlurVolume = 1 - 70 / (i\state * 3)
-
-					If Rand(25/FPSfactor) = 1 And (MilliSecs() Mod 1000) < 200
-						PlaySound_Strict(DecaySFX(Rand(3)))
-					EndIf
-
-					If (Not CanTeleportToHalloweenRoom()) Then
-						RemoveItem(i)
-					ElseIf i\state > 70 * 15 Then
-						RemoveItem(i)
-						Local bonesInInv% = 0
-						For j = 0 To MaxItemAmount - 1
-							it.Items = Inventory(j)
-							If it <> Null And it\itemtemplate\name = "bone" Then
-								bonesInInv = bonesInInv + 1
-								RemoveItem(it)
-								If bonesInInv >= 3 Then Exit
-							EndIf
-						Next
-
-						If bonesInInv > 0 Then
-							PlaySound_Strict(LoadTempSound("SFX\Halloween\BonePickUp.ogg"))
-						EndIf
-
-						If bonesInInv >= 3 Then
-							; Some extra SFX
-							If (Not Contained106) Then
-								For it2.Items = Each Items
-									If it2\itemtemplate\name = "scp330" Then
-										For r.Rooms = Each Rooms
-											If r\RoomTemplate\Name = "914" Then
-												de.Decals = CreateDecal(0, EntityX(it2\collider),EntityY(it2\collider)-0.009,EntityZ(it2\collider), 90, Rand(360), 0)
-												de\Size = 0.04 : de\SizeChange = 0.0004 : de\MaxSize = 0.18 : de\timer = 90000 : EntityAlpha(de\obj, 0.8) : UpdateDecals()
-												PositionEntity(it2\collider, EntityX(r\Objects[2], True), EntityY(r\Objects[2], True) - 0.4, EntityZ(r\Objects[2], True))
-												RotateEntity(it2\collider, 0, r\angle + 30, 0)
-												ResetEntity(it2\collider)
-												de.Decals = CreateDecal(0, EntityX(it2\collider),8 * RoomScale + 0.004+Rnd(-0.001,0.001),EntityZ(it2\collider), 90, Rand(360), 0)
-												de\Size = 0.08 : de\SizeChange = 0.0008 : de\MaxSize = 0.6 : de\timer = 90000 : EntityAlpha(de\obj, 0.8) : UpdateDecals()
-												Exit
-											EndIf
-										Next
-										Exit
-									EndIf
-								Next
-							EndIf
-							Continue
-						EndIf
-
-						r = Null
-						e = Null
-						For e.Events = Each Events
-							If e\EventName = "halloweenpd" Then
-								r = e\room
-								Teleport(r)
-								FillHalloweenPDWithBones(r)
-								Exit
-							EndIf
-						Next
-
-						If r = Null Then
-							For r2.Rooms = Each Rooms
-								If r2\RoomTemplate\Name = "halloweenpd" Then
-									r = r2
-									Teleport(r)
-									CreateEvent("halloweenpd","halloweenpd",0)
-									FillHalloweenPDWithBones(r)
-									Exit
-								EndIf
-							Next
-						EndIf
-
-						If r = Null Then
-							r = CreateRoom(0, ROOM1, 8, 1500, 128, 0, "halloweenpd")
-							SetupTriggerBoxes(r)
-							Teleport(r)
-							CreateEvent("halloweenpd","halloweenpd",0)
-						EndIf
-
-						If e = Null Then
-							For e.Events = Each Events
-								If e\EventName = "halloweenpd" Then Exit
-							Next
-						EndIf
-						e\EventState3 = bonesInInv
-						If bonesInInv > 0 Then
-							Msg = Format(I_Loc\MessageItem_Bonefragment, e\EventState3, e\EventState)
-							MsgTimer = 70*5
-						EndIf
-
-						e\img = LoadImage_Strict("GFX\Halloween\blinkmortal.pd")
-						LoadEventSound(e, "SFX\Room\Halloween\PD\blink.ogg")
-
-						PositionEntity(Collider, r\x + 1470 * RoomScale, r\y + 112 * RoomScale + 0.2, r\z + -536 * RoomScale)
-						ResetEntity(Collider)
-						PositionEntity(Curr106\Collider, EntityX(Collider), EntityY(Collider) + 0.2, EntityZ(Collider))
-						RotateEntity(Curr106\Collider, 0, EntityYaw(Collider) + 180, 0)
-						If SelectedDifficulty\aggressiveNPCs Then
-							MoveEntity(Curr106\Collider, 0, 0, -5)
-						Else
-							MoveEntity(Curr106\Collider, 0, 0, -9.5)
-						EndIf
-						ResetEntity(Curr106\Collider)
-
-						PlaySound_Strict(Use914SFX)
-						PlaySound_Strict(OldManSFX(5))
-
-						If Curr106\TextureID <> 1 Then
-							ChangeNPCTextureID(Curr106, 1)
-						EndIf
-
-						LightVolume = -0.1
-						BlinkTimer = -10	
-					EndIf
-				EndIf
-			Case "boneflute"
-				i\state = Max(0, i\state - FPSfactor)
-		End Select
 	Next
 
-	CatchErrors("Update items")
-
-	If LostHands Then ClosestItem = Null
-	
 	If ClosestItem <> Null And MouseHit1 Then PickItem(ClosestItem)
 End Function
 
 Function PickItem(item.Items)
-	Local n% = 0
-	Local canpickitem = True
-	Local fullINV% = True
-	
-	For n% = 0 To MaxItemAmount - 1
-		If Inventory(n)=Null
-			fullINV = False
+	If item = Null Then Return
+
+	Local n% = -1
+	For i% = 0 To MaxItemAmount - 1
+		If Inventory(i) = Null Then
+			n = i
 			Exit
 		EndIf
 	Next
-	
-	If WearingHazmat > 0 Then
-		Msg = I_Loc\MessageItem_HazmatNopickup
-		MsgTimer = 70*5
-		Return
-	EndIf
-	
-	CatchErrors("Uncaught (PickItem)")
-	If (Not fullINV) Then
-		For n% = 0 To MaxItemAmount - 1
-			If Inventory(n) = Null Then
-				Select item\itemtemplate\name
-					Case "scp1123"
-						If Not (Wearing714 = 1) Then
-							If PlayerRoom\RoomTemplate\Name <> "room1123" Then
-								ShowEntity Light
-								LightFlash = 7
-								PlaySound_Strict(LoadTempSound("SFX\SCP\1123\Touch.ogg"))		
-								DeathMSG = I_Loc\DeathMessage_1123
-								Kill()
-							EndIf
-							For e.Events = Each Events
-								If e\eventname = "room1123" Then 
-									If e\eventstate = 0 Then
-										ShowEntity Light
-										LightFlash = 3
-										PlaySound_Strict(LoadTempSound("SFX\SCP\1123\Touch.ogg"))
-									EndIf
-									e\eventstate = Max(1, e\eventstate)
-									
-									Exit
-								EndIf
-							Next
-						EndIf
-						
-						Return
-					Case "killbat"
-						If item\state Then
-							If SteamActive And (Not UsedConsole) Then Steam_Achieve("AchvHlwnEye")
-							Msg = I_Loc\MessageItem_066Killbat
-							MsgTimer = 70*7
-						Else
-							ShowEntity Light
-							LightFlash = 1.0
-							PlaySound_Strict(IntroSFX(11))
-							If PlayerRoom\RoomTemplate\Name = "914" And EntityDistance(Collider, PlayerRoom\Objects[3]) < 1 Then
-								DeathMSG = I_Loc\DeathMessage_Killbat
-							Else
-								DeathMSG = I_Loc\DeathMessage_KillbatOutside
-							EndIf
-							Kill()
-						EndIf
-					Case "scp148"
-						GiveAchievement(Achv148)	
-					Case "scp513"
-						GiveAchievement(Achv513)
-					Case "scp860"
-						GiveAchievement(Achv860)
-					Case "key6"
-						GiveAchievement(AchvOmni)
-					Case "veryfinevest"
-						Msg = I_Loc\MessageItem_VestHeavy
-						MsgTimer = 70*6
-						Exit
-					Case "firstaid", "finefirstaid", "veryfinefirstaid", "firstaid2"
-						item\state = 0
-					Case "snavulti"
-						GiveAchievement(AchvSNAV)
-					Case "hazmatsuit", "hazmatsuit2", "hazmatsuit3"
-						canpickitem = True
-						For z% = 0 To MaxItemAmount - 1
-							If Inventory(z) <> Null Then
-								If Inventory(z)\itemtemplate\group="hazmat" Then
-									canpickitem% = False
-									Exit
-								ElseIf Inventory(z)\itemtemplate\group="vest" Then
-									canpickitem% = 2
-									Exit
-								EndIf
-							EndIf
-						Next
-						
-						If canpickitem=False Then
-							Msg = I_Loc\MessageItem_HazmatConflictHazmat
-							MsgTimer = 70 * 5
-							Return
-						ElseIf canpickitem=2 Then
-							Msg = I_Loc\MessageItem_VestConflictHazmat
-							MsgTimer = 70 * 5
-							Return
-						Else
-							;TakeOffStuff(1+16)
-							SelectedItem = item
-						EndIf
-					Case "vest","finevest"
-						canpickitem = True
-						For z% = 0 To MaxItemAmount - 1
-							If Inventory(z) <> Null Then
-								If Inventory(z)\itemtemplate\group="vest" Then
-									canpickitem% = False
-									Exit
-								ElseIf Inventory(z)\itemtemplate\group="hazmat" Then
-									canpickitem% = 2
-									Exit
-								EndIf
-							EndIf
-						Next
-						
-						If canpickitem=False Then
-							Msg = I_Loc\MessageItem_VestConflictVest
-							MsgTimer = 70 * 5
-							Return
-						ElseIf canpickitem=2 Then
-							Msg = I_Loc\MessageItem_VestConflictHazmat
-							MsgTimer = 70 * 5
-							Return
-						Else
-							;TakeOffStuff(2)
-							SelectedItem = item
-						EndIf
-					Case "scp330"
-						If SteamActive And (Not UsedConsole) Then Steam_SetStatInt("has_grabbed_candy", 1)
-						If item\state = -1 Then
-							; Empty, allow it to be picked up
-						ElseIf item\state = -3 Then
-							If Wearing714 Then
-								SliceOffHands()
-							Else
-								Msg = I_Loc\MessageItem_Scp330Nouse
-								MsgTimer = 70 * 10
-							EndIf
-							Return	
-						ElseIf PopCount(item\state) < 3 Lor item\state = -2 Then
-							Local candy%
-							If item\state = -2 Then
-								candy = Rand(0, 2)
-							Else
-								; Reseed to to deterministically bind candy order to seed to make it more obvious that save-scumming to get all three types is not possible.
-								SeedRnd GetRandomSeed()
-								Local candyStart% = Rand(0, 2), candyMask%
-								For i% = 0 To 2
-									candy = (candyStart + i) Mod 3
-									candyMask = 1 Shl candy
-									If Not (item\state And candyMask) Then Exit
-								Next
-								item\state = item\state Or candyMask
-								SetAnimTime item\model, item\state + 1
-							EndIf
-							Select candy
-								Case 0
-									item = CreateItem("eyecandy", EntityX(Collider), EntityY(Collider), EntityZ(Collider))
-								Case 1
-									item = CreateItem("lollipop", EntityX(Collider), EntityY(Collider), EntityZ(Collider))
-								Case 2
-									item = CreateItem("chocolate", EntityX(Collider), EntityY(Collider), EntityZ(Collider))
-							End Select
-						Else
-							SliceOffHands()
-							Return
-						EndIf
-					Case "bone"
-						For e.Events = Each Events
-							If e\EventName = "halloweenpd" And PlayerRoom = e\room Then
-								If e\EventState3 <= e\EventState Then
-									e\EventState3 = e\EventState3 + 1
-									PlaySound_Strict(LoadTempSound("SFX\Halloween\BonePickUp.ogg"))
-									RemoveItem(item)
-									Msg = Format(I_Loc\MessageItem_Bonefragment, e\EventState3, e\EventState)
-									MsgTimer = 70*5
 
-									If e\EventState3 = e\EventState Then
-										item = CreateItem("boneflute", EntityX(Collider), EntityY(Collider), EntityZ(Collider))
-										Curr106\State = 10000
-										Curr106\Idle = False
-										TeleportFromHalloweenRoom()
-										If SteamActive And (Not UsedConsole) Then Steam_Achieve("AchvHlwnBar")
-									Else
-										Return
-									EndIf
-								EndIf
-								Exit
-							EndIf
-						Next
-				End Select
-				
-				If item\itemtemplate\sound <> 66 Then PlaySound_Strict(PickSFX(item\itemtemplate\sound))
-				item\Picked = True
-				item\Dropped = -1
-				
-				item\itemtemplate\found=True
-				ItemAmount = ItemAmount + 1
-				
-				Inventory(n) = item
-				HideEntity(item\collider)
-				Exit
-			EndIf
-		Next
-	Else
+	If n = -1 Then
 		Msg = I_Loc\MessageItem_Full
 		MsgTimer = 70 * 5
-	EndIf
-	CatchErrors("PickItem")
-End Function
-
-Function SliceOffHands()
-	Local pvt% = CreatePivot()
-	EntityParent(pvt, Camera, False)
-	EntityParent(pvt, 0, True)
-	MoveEntity(pvt, 0.1, -0.1, 0.2)
-	Local item.Items = CreateItem("hand", EntityX(pvt), EntityY(pvt), EntityZ(pvt))
-	ScaleEntity(item\model, -item\itemtemplate\scale, item\itemtemplate\scale, item\itemtemplate\scale, True)
-	RotateEntity(item\collider, 0, EntityYaw(Camera) - 90, 0)
-	MoveEntity(pvt, -0.2, -0.2, -0.2)
-	item = CreateItem("hand", EntityX(pvt), EntityY(pvt), EntityZ(pvt))
-	RotateEntity(item\collider, 0, EntityYaw(Camera) + 90 + Rnd(10, 45), 0)
-	Bloodloss = Max(Bloodloss, 50)
-	Injuries = Max(Injuries, 25)
-	BlurTimer = 10 * 70
-	CameraShake = 3
-	LostHands = True
-	If Wearing714 Then
-		For n% = 0 To MaxItemAmount-1
-			If Inventory(n) <> Null And Inventory(n)\itemtemplate\name = "scp714" Then
-				Local it.Items = Inventory(n)
-				DropItem(it)
-				PositionEntity(it\collider, EntityX(item\collider, True), EntityY(item\collider, True), EntityZ(item\collider, True), True)
-				Exit
-			EndIf
-		Next
-		Wearing714 = False
-	EndIf
-	DeathMSG = I_Loc\DeathMessage_330
-	PlaySound_Strict(LoadTempSound("SFX\General\Slash1.ogg"))
-	FreeEntity(pvt)
-End Function
-
-Function DropItem(item.Items,playdropsound%=True)
-	If WearingHazmat > 0 Then
-		Msg = I_Loc\MessageItem_HazmatNodrop
-		MsgTimer = 70*5
 		Return
 	EndIf
-	
-	CatchErrors("Uncaught (DropItem)")
-	If playdropsound Then
-		If item\itemtemplate\sound <> 66 Then PlaySound_Strict(PickSFX(item\itemtemplate\sound))
-	EndIf
-	
-	item\Dropped = 1
-	
-	EntityParent(item\collider, 0)
-	ShowEntity(item\collider)
-	PositionEntity(item\collider, EntityX(Camera), EntityY(Camera), EntityZ(Camera), True)
-	RotateEntity(item\collider, EntityPitch(Camera), EntityYaw(Camera)+Rnd(-20,20), 0, True)
-	TranslateEntity(item\collider, 0, -0.1, 0.1)
-	RotateEntity(item\collider, 0, EntityYaw(Camera)+Rnd(-110,110), 0, True)
-	
-	ResetEntity (item\collider)
-	
-	item\Picked = False
-	For z% = 0 To MaxItemAmount - 1
-		If Inventory(z) = item Then
-			Inventory(z) = Null
-			Exit
-		EndIf
-	Next
-	Select item\itemtemplate\name
-		Case "gasmask", "supergasmask", "gasmask3"
-			WearingGasMask = False
-		Case "hazmatsuit",  "hazmatsuit2", "hazmatsuit3"
-			WearingHazmat = False
-		Case "vest", "finevest"
-			WearingVest = False
-		Case "nvgoggles"
-			If WearingNightVision = 1 Then CameraFogFar = StoredCameraFogFar : WearingNightVision = False
-		Case "supernv"
-			If WearingNightVision = 2 Then CameraFogFar = StoredCameraFogFar : WearingNightVision = False
-		Case "finenvgoggles"
-			If WearingNightVision = 3 Then CameraFogFar = StoredCameraFogFar : WearingNightVision = False
-		Case "scp714"
-			Wearing714 = False
-		Case "scp1499","super1499"
-			Wearing1499 = False
-		Case "scp427"
-			I_427\Using = False
-		Case "pumpkin"
-			TakeOffPumpkin()
-	End Select
-	
-	CatchErrors("DropItem")
-	
+
+	If item\itemtemplate\sound <> 66 Then PlaySound_Strict(PickSFX(item\itemtemplate\sound))
+	item\Picked = True
+	item\Dropped = -1
+	item\itemtemplate\found = True
+	ItemAmount = ItemAmount + 1
+	Inventory(n) = item
+	HideEntity(item\collider)
 End Function
-
-;Update any ailments inflicted by SCP-294 drinks.
-Function Update294()
-	CatchErrors("Uncaught (Update294)")
-	
-	If CameraShakeTimer > 0 Then
-		CameraShakeTimer = Max(CameraShakeTimer - (FPSfactor/70), 0)
-		CameraShake = 2
-	EndIf
-	
-	If VomitTimer > 0 Then
-		DebugLog VomitTimer
-		VomitTimer = VomitTimer - (FPSfactor/70)
-		
-		If (MilliSecs() Mod 1600) < Rand(200, 400) Then
-			If BlurTimer = 0 Then BlurTimer = Rnd(10, 20)*70
-			CameraShake = Rnd(0, 2)
-		EndIf
-		
-;		If (MilliSecs() Mod 1000) < Rand(1200) Then 
-		
-		If Rand(50/FPSfactor) = 1 And (MilliSecs() Mod 4000) < 200 Then PlaySound_Strict(CoughSFX(Rand(0,2)))
-		
-		;Regurgitate when timer is below 10 seconds. (ew)
-		If VomitTimer < 10 And Rnd(0, 500 * VomitTimer / FPSfactor) < 2 Then
-			If (Not ChannelPlaying(VomitCHN)) And (Not Regurgitate) Then
-				VomitCHN = PlaySound_Strict(LoadTempSound("SFX\SCP\294\Retch" + Rand(1, 2) + ".ogg"))
-				Regurgitate = MilliSecs() + 50
-			EndIf
-		EndIf
-		
-		If Regurgitate > MilliSecs() And Regurgitate <> 0 Then
-			mouse_y_speed_1 = mouse_y_speed_1 + 1.0
-		Else
-			Regurgitate = 0
-		EndIf
-		
-	ElseIf VomitTimer < 0 Then ;vomit
-		VomitTimer = VomitTimer - (FPSfactor/70)
-		
-		If VomitTimer > -5 Then
-			If (MilliSecs() Mod 400) < 50 Then CameraShake = 4 
-			mouse_x_speed_1 = 0.0
-			Playable = False
-		Else
-			Playable = True
-		EndIf
-		
-		If (Not Vomit) Then
-			BlurTimer = 40 * 70
-			VomitSFX = LoadSound_Strict("SFX\SCP\294\Vomit.ogg")
-			VomitCHN = PlaySound_Strict(VomitSFX)
-			PrevInjuries = Injuries
-			PrevBloodloss = Bloodloss
-			Injuries = Injuries + 1.5
-			Bloodloss = Bloodloss + 70
-			EyeIrritation = 9 * 70
-			
-			Local pvt = CreatePivot()
-			PositionEntity(pvt, EntityX(Camera), EntityY(Collider) - 0.05, EntityZ(Camera))
-			TurnEntity(pvt, 90, 0, 0)
-			EntityPick(pvt, 0.3)
-			Local de.decals = CreateDecal(5, PickedX(), PickedY() + 0.005, PickedZ(), 90, 180, 0)
-			de\Size = 0.001 : de\SizeChange = 0.001 : de\MaxSize = 0.6 : EntityAlpha(de\obj, 1.0) : EntityColor(de\obj, 0.0, Rnd(200, 255), 0.0) : ScaleSprite de\obj, de\size, de\size
-			FreeEntity pvt
-			Vomit = True
-		EndIf
-		
-		UpdateDecals()
-		
-		mouse_y_speed_1 = mouse_y_speed_1 + Max((1.0 + VomitTimer / 10), 0.0)
-		
-		If VomitTimer < -15 Then
-			FreeSound_Strict(VomitSFX)
-			VomitTimer = 0
-			If KillTimer >= 0 Then
-				PlaySound_Strict(BreathSFX(0,0))
-			EndIf
-			Injuries = PrevInjuries
-			Bloodloss = PrevBloodloss
-			Vomit = False
-		EndIf
-	EndIf
-	
-	CatchErrors("Update294")
-End Function
-
-
-
-
-
 
 
 

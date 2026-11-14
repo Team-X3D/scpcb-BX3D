@@ -1,0 +1,59 @@
+1,8,maintenance tunnel corner,0
+1,9,maintenance tunnel corridor,0
+1,10,maintenance tunnel corridor,0
+1,11,maintenance tunnel t-shaped room,3
+1,12,maintenance tunnel corridor,0
+1,13,maintenance tunnel t-shaped room,3
+1,14,maintenance tunnel corridor,0
+1,15,maintenance tunnel corridor,0
+1,16,maintenance tunnel corner,3
+2,8,maintenance tunnel corridor,3
+2,11,maintenance tunnel corridor,3
+2,13,maintenance tunnel corridor,3
+2,16,maintenance tunnel corridor,3
+3,8,maintenance tunnel corridor,3
+3,11,maintenance tunnel elevator,3
+3,13,maintenance tunnel corridor,3
+3,16,maintenance tunnel endroom,1
+4,8,maintenance tunnel corridor,3
+4,11,maintenance tunnel corridor,3
+4,13,maintenance tunnel corridor,3
+5,8,maintenance tunnel corridor,3
+5,11,maintenance tunnel corridor,3
+5,13,maintenance tunnel corridor,3
+6,8,maintenance tunnel corner,1
+6,9,maintenance tunnel t-shaped room,3
+6,10,maintenance tunnel corridor,0
+6,11,maintenance tunnel t-shaped room,1
+6,12,maintenance tunnel corridor,0
+6,13,maintenance tunnel 4-way room,0
+6,14,maintenance tunnel corridor,0
+6,15,maintenance tunnel corridor,0
+6,16,maintenance tunnel corner,3
+7,9,maintenance tunnel corridor,3
+7,13,maintenance tunnel corridor,3
+7,16,maintenance tunnel corridor,1
+8,9,maintenance tunnel corridor,3
+8,13,maintenance tunnel corridor,3
+8,16,maintenance tunnel corridor,1
+9,9,maintenance tunnel corridor,3
+9,13,maintenance tunnel corridor,3
+9,16,maintenance tunnel elevator,1
+10,9,maintenance tunnel corridor,3
+10,13,maintenance tunnel corridor,3
+10,16,maintenance tunnel corridor,1
+11,9,maintenance tunnel corridor,3
+11,12,maintenance tunnel generator room,0
+11,13,maintenance tunnel t-shaped room,2
+11,16,maintenance tunnel corridor,1
+12,9,maintenance tunnel corridor,3
+12,13,maintenance tunnel corridor,3
+12,16,maintenance tunnel corridor,1
+13,9,maintenance tunnel corner,1
+13,10,maintenance tunnel corridor,0
+13,11,maintenance tunnel corridor,0
+13,12,maintenance tunnel corridor,0
+13,13,maintenance tunnel t-shaped room,1
+13,14,maintenance tunnel corridor,0
+13,15,maintenance tunnel corridor,0
+13,16,maintenance tunnel corner,2
