@@ -1092,8 +1092,12 @@ Global Panel294 = 0, Using294%, Input294$
 Global ViewModelMesh%, ViewModelRig%, ViewModelLight%
 Global ViewModelFrame#, ViewModelTarget#
 Global ViewModelState%, ViewModelGrabRequest%, ViewModelLast%
-Const VIEWMODEL_GRAB_DIST# = 0.75
+Global ViewModelPendingItem.Items
 Const VIEWMODEL_BACK# = -0.4 ; not a very great practice but there's only so much you can do
+Const VIEWMODEL_REST_END# = 4.0
+Const VIEWMODEL_REACH_START# = 15.0
+Const VIEWMODEL_REACH_END# = 25.0
+Const VIEWMODEL_GRAB_END# = 45.0
 
 ;----------------------------------------------  Items  -----------------------------------------------------
 
@@ -3754,6 +3758,7 @@ Function FreeViewModel()
 	ViewModelTarget = 0.0
 	ViewModelState = 0
 	ViewModelGrabRequest = False
+	ViewModelPendingItem = Null
 	ViewModelLast = 0
 End Function
 
@@ -3774,6 +3779,9 @@ Function InitViewModel()
 
 	EntityParent ViewModelRig, 0, True
 	EntityParent ViewModelMesh, ViewModelRig, True
+	EntityParent ViewModelRig, Camera, False
+	PositionEntity ViewModelRig, 0, 0, 0, False
+	RotateEntity ViewModelRig, 0, 0, 0, False
 	ScaleEntity ViewModelRig, 1, 1, 1, False
 	CameraProjMode ViewModelRig, 0
 
@@ -3784,7 +3792,7 @@ Function InitViewModel()
 	LightColor ViewModelLight, 255, 255, 255
 
 	ViewModelFrame = 0.0
-	ViewModelTarget = 4.0
+	ViewModelTarget = VIEWMODEL_REST_END#
 	ViewModelState = 0
 	ViewModelLast = MilliSecs()
 	HideEntity ViewModelMesh
@@ -3800,47 +3808,35 @@ Function UpdateViewModel()
 
 	If ViewModelGrabRequest Then
 		ViewModelGrabRequest = False
-		ViewModelState = 3
-		ViewModelFrame = 29.0
-		ViewModelTarget = 44.0
+		If ViewModelState = 3 Then ViewModelFrame = VIEWMODEL_REACH_END#
+		ViewModelState = 2
+		ViewModelTarget = VIEWMODEL_GRAB_END#
 	EndIf
 
-	If ViewModelState <> 3 Then
+	If ViewModelState <> 2 Then
 		Local want% = 0
-		If ClosestItem <> Null Then
-			If EntityDistance(Camera, ClosestItem\collider) <= VIEWMODEL_GRAB_DIST Then
-				want = 2
-			Else
-				want = 1
-			EndIf
-		EndIf
+		If ClosestItem <> Null Then want = 1
 
-		If ViewModelState = 4 Then
+		If ViewModelState = 3 Then
 			If want = 1 Then
 				ViewModelState = 1
-				ViewModelFrame = 24.0
-				ViewModelTarget = 29.0
-			ElseIf want = 2 Then
-				ViewModelState = 2
-				ViewModelFrame = 14.0
-				ViewModelTarget = 24.0
+				ViewModelFrame = VIEWMODEL_REACH_START#
+				ViewModelTarget = VIEWMODEL_REACH_END#
 			Else
-				ViewModelTarget = 44.0
+				ViewModelTarget = VIEWMODEL_GRAB_END#
 			EndIf
 		Else
 			ViewModelState = want
 
 			Select ViewModelState
 				Case 0
-					ViewModelTarget = 4.0
+					ViewModelTarget = VIEWMODEL_REST_END#
 				Case 1
-					ViewModelTarget = 29.0
-				Case 2
-					ViewModelTarget = 24.0
+					ViewModelTarget = VIEWMODEL_REACH_END#
 			End Select
 		EndIf
 	Else
-		If ViewModelFrame >= 44.0 Then ViewModelState = 4
+		If ViewModelFrame >= VIEWMODEL_GRAB_END# Then ViewModelState = 3
 	EndIf
 
 	Local now% = MilliSecs()
@@ -3854,6 +3850,12 @@ Function UpdateViewModel()
 	EndIf
 
 	SetAnimTime ViewModelMesh, ViewModelFrame
+
+	If ViewModelState = 2 And ViewModelPendingItem <> Null And ViewModelFrame >= 30.0 Then
+		PickItem(ViewModelPendingItem)
+		ViewModelPendingItem = Null
+	EndIf
+
 	ViewModelLast = now
 End Function
 

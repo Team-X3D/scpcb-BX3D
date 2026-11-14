@@ -277,7 +277,21 @@ Function UpdateItems()
 		EndIf
 	Next
 
-	If ClosestItem <> Null And MouseHit1 Then PickItem(ClosestItem)
+	If ClosestItem <> Null And MouseHit1 Then StartItemGrab(ClosestItem)
+End Function
+
+Function StartItemGrab(item.Items)
+	If item = Null Then Return
+	If ViewModelPendingItem <> Null Then Return
+
+	If ItemAmount >= MaxItemAmount Then
+		Msg = I_Loc\MessageItem_Full
+		MsgTimer = 70 * 5
+		Return
+	EndIf
+
+	ViewModelPendingItem = item
+	ViewModelGrabRequest = True
 End Function
 
 Function PickItem(item.Items)
@@ -295,7 +309,6 @@ Function PickItem(item.Items)
 	ItemAmount = ItemAmount + 1
 	If ItemAmount = 1 Then InvSelected = 0
 	HideEntity(item\collider)
-	ViewModelGrabRequest = True
 End Function
 
 Function DropItem(item.Items)
