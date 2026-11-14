@@ -103,19 +103,59 @@ Function MenuClick()
 	If cchn <> 0 Then ChannelVolume cchn, 0.8*SFXVolume
 End Function
 
-Function MenuSetSelected(i%)
-	If i% < 0 Then i% = MenuEntryCount-1
-	If i% >= MenuEntryCount Then i% = 0
-	If i% = MenuSelected Then Return
-	MenuSelected = i%
-	MenuBarFrom = MenuBarPos
-	MenuBarTarget = GraphicHeight*0.52 + i%*(42.0+10.0)*UIScale
-	MenuBarStart = MilliSecs()
+Function MenuHoverSound()
 	If MilliSecs() > MenuHoverCooldown Then
 		Local hchn% = PlaySound_Strict(MenuHoverSFX)
 		If hchn <> 0 Then ChannelVolume hchn, 0.8*SFXVolume
 		MenuHoverCooldown = MilliSecs() + 120
 	EndIf
+End Function
+
+Function MenuMoveBar(y#)
+	MenuBarFrom = MenuBarPos
+	MenuBarTarget = y#
+	MenuBarStart = MilliSecs()
+End Function
+
+Function MenuUpdateBar()
+	Local barT# = Float(MilliSecs()-MenuBarStart) / Float(120)
+	If barT# >= 1.0 Then
+		MenuBarPos = MenuBarTarget
+	Else
+		MenuBarPos = MenuBarFrom + (MenuBarTarget-MenuBarFrom)*MenuEaseOut(barT#)
+	EndIf
+End Function
+
+Function MenuDrawBrackets(x#, y#, w#, h#)
+	Local b% = Int(8.0*UIScale)
+	Color 255, 255, 255
+	Rect x#, y#, b%, 1, False
+	Rect x#, y#, 1, b%, False
+	Rect x#+w#-b%, y#, b%, 1, False
+	Rect x#+w#-1, y#, 1, b%, False
+	Rect x#, y#+h#-1, b%, 1, False
+	Rect x#, y#+h#-b%, 1, b%, False
+	Rect x#+w#-b%, y#+h#-1, b%, 1, False
+	Rect x#+w#-1, y#+h#-b%, 1, b%, False
+End Function
+
+Function MenuSpacedText#(x#, y#, s$, gap# = 2.0)
+	Local x0# = x#
+	For j% = 1 To Len(s$)
+		Local c$ = Mid(s$, j%, 1)
+		Text x#, y#, c$, False, True
+		x# = x# + StringWidth(c$) + gap#*UIScale
+	Next
+	Return x#-x0#
+End Function
+
+Function MenuSetSelected(i%)
+	If i% < 0 Then i% = MenuEntryCount-1
+	If i% >= MenuEntryCount Then i% = 0
+	If i% = MenuSelected Then Return
+	MenuSelected = i%
+	MenuMoveBar(GraphicHeight*0.52 + i%*(42.0+10.0)*UIScale)
+	MenuHoverSound()
 End Function
 
 Function MenuInput%()
@@ -159,12 +199,7 @@ Function MenuDrawEntries(t#)
 	Local eh# = 42.0*UIScale
 	Local by# = GraphicHeight*0.52 + MenuSelected*(42.0+10.0)*UIScale
 
-	Local barT# = Float(MilliSecs()-MenuBarStart) / Float(120)
-	If barT# >= 1.0 Then
-		MenuBarPos = MenuBarTarget
-	Else
-		MenuBarPos = MenuBarFrom + (MenuBarTarget-MenuBarFrom)*MenuEaseOut(barT#)
-	EndIf
+	MenuUpdateBar()
 
 	For i% = 0 To MenuEntryCount-1
 		Local p# = 1.0
@@ -196,16 +231,7 @@ Function MenuDrawEntries(t#)
 			Next
 	
 			If i% = MenuSelected And MenuIntroDone Then
-				Local b% = Int(8.0*UIScale)
-				Color 255, 255, 255
-				Rect x#, by#, b%, 1, False
-				Rect x#, by#, 1, b%, False
-				Rect x#+ew#-b%, by#, b%, 1, False
-				Rect x#+ew#-1, by#, 1, b%, False
-				Rect x#, by#+eh#-1, b%, 1, False
-				Rect x#, by#+eh#-b%, 1, b%, False
-				Rect x#+ew#-b%, by#+eh#-1, b%, 1, False
-				Rect x#+ew#-1, by#+eh#-b%, 1, b%, False
+				MenuDrawBrackets(x#, by#, ew#, eh#)
 			EndIf
 			EndIf
 	Next
@@ -344,4 +370,356 @@ Function InputBox$(x%, y%, width%, height%, Txt$, ID% = 0, virtualKeyboardMode=0
 	EndIf
 
 	Return Txt
+End Function
+
+Global InvActionSelected%, InvOpenedAt%, InvInputHandled%
+Global InvPreviewCam%, InvPreviewPivot%, InvPreviewMesh%
+Global InvPreviewTemplate.ItemTemplates
+Global InvSlideStart%, InvSlideDir%, InvIconSize%, InvIconsDirty%
+Dim InvIcon%(32)
+
+Function InvBig%()
+	Return Int(GraphicHeight*0.34)
+End Function
+
+Function InvSmall%()
+	Return Int(GraphicHeight*0.17)
+End Function
+
+Function InvCY#()
+	Return GraphicHeight*0.46
+End Function
+
+Function InvSlotX#(k%)
+	If k% = 0 Then Return GraphicWidth/2.0
+	Local gap# = GraphicHeight*0.03
+	Local d# = InvBig()/2.0 + gap# + InvSmall()/2.0 + (Abs(k%)-1)*(InvSmall()+gap#)
+	Return GraphicWidth/2.0 + Sgn(k%)*d#
+End Function
+
+Function InvListX#()
+	Return 48.0*UIScale
+End Function
+
+Function InvRowW#()
+	Return 320.0*UIScale
+End Function
+
+Function InvActX#()
+	Return GraphicWidth-48.0*UIScale-InvRowW()
+End Function
+
+Function InvActY#(i%)
+	Return GraphicHeight*0.08-21.0*UIScale+i%*52.0*UIScale
+End Function
+
+Function InvActionLabel$(item.Items, i%)
+	If i% = 1 Then Return "DROP"
+	Return "USE"
+End Function
+
+Function InvDrawWrapped(x#, y#, txt$, maxw#, maxlines%)
+	Local n% = 0
+	While txt$ <> "" And n% < maxlines%
+		Local cut% = Len(txt$)
+		While cut% > 0 And StringWidth(Left(txt$, cut%)) > maxw#
+			cut% = cut%-1
+			While cut% > 0 And Mid(txt$, cut%+1, 1) <> " "
+				cut% = cut%-1
+			Wend
+		Wend
+		If cut% = 0 Then cut% = Len(txt$)
+		Text x#, y#+n%*18.0*UIScale, Trim(Left(txt$, cut%)), False, False
+		txt$ = Trim(Mid(txt$, cut%+1))
+		n% = n%+1
+	Wend
+End Function
+
+Function InventoryResetPreview()
+	If InvPreviewMesh <> 0 Then FreeEntity InvPreviewMesh
+	If InvPreviewCam <> 0 Then FreeEntity InvPreviewCam
+	If InvPreviewPivot <> 0 Then FreeEntity InvPreviewPivot
+	InvPreviewMesh = 0
+	InvPreviewCam = 0
+	InvPreviewPivot = 0
+	InvPreviewTemplate = Null
+	For i% = 0 To 32
+		If InvIcon(i%) <> 0 Then
+			FreeImage InvIcon(i%)
+			InvIcon(i%) = 0
+		EndIf
+	Next
+	InvIconsDirty = True
+End Function
+
+Function SetPreviewFullbright(entity%)
+	If entity = 0 Then Return
+	If EntityClass(entity) = "Mesh" Then EntityFX entity, 1
+	For i% = 1 To CountChildren(entity)
+		SetPreviewFullbright(GetChild(entity, i))
+	Next
+End Function
+
+Function InvSetMesh(item.Items)
+	If InvPreviewCam = 0 Then
+		InvPreviewCam = CreateCamera()
+		CameraClsColor InvPreviewCam, 0, 0, 0
+		CameraClsMode InvPreviewCam, False, True
+		CameraRange InvPreviewCam, 0.05, 4.0
+		CameraProjMode InvPreviewCam, 0
+		InvPreviewPivot = CreatePivot()
+		PositionEntity InvPreviewPivot, 10000.0, 10000.0, 10000.0
+		PositionEntity InvPreviewCam, 10000.0, 10000.0, 9998.4
+		PointEntity InvPreviewCam, InvPreviewPivot
+	EndIf
+
+	If item\itemtemplate <> InvPreviewTemplate Then
+		If InvPreviewMesh <> 0 Then FreeEntity InvPreviewMesh
+		InvPreviewTemplate = item\itemtemplate
+		InvPreviewMesh = CopyEntity(InvPreviewTemplate\obj, InvPreviewPivot)
+		SetPreviewFullbright(InvPreviewMesh)
+
+		Local cx# = 0.0
+		Local cy# = 0.0
+		Local cz# = 0.0
+		Local maxdim# = 1.0
+		Local mesh% = FindItemMesh(InvPreviewMesh)
+		If mesh <> 0 Then
+			GetMeshExtents(mesh)
+			If Mesh_MagX >= 0.0 And Mesh_MagY >= 0.0 And Mesh_MagZ >= 0.0 Then
+				cx = (Mesh_MinX+Mesh_MaxX)*0.5
+				cy = (Mesh_MinY+Mesh_MaxY)*0.5
+				cz = (Mesh_MinZ+Mesh_MaxZ)*0.5
+				maxdim = Max(Mesh_MagX, Max(Mesh_MagY, Mesh_MagZ))
+			EndIf
+		EndIf
+		If maxdim <= 0.0 Then maxdim = 1.0
+
+		Local s# = 1.5/maxdim
+		ScaleEntity InvPreviewMesh, s, s, s
+		PositionEntity InvPreviewMesh, -cx*s, -cy*s, -cz*s
+	EndIf
+End Function
+
+Function InvRender(x%, y%, w%, h%)
+	SetBuffer BackBuffer()
+	CameraProjMode Camera, 0
+	CameraProjMode ark_blur_cam, 0
+	CameraViewport InvPreviewCam, x%, y%, w%, h%
+	CameraProjMode InvPreviewCam, 1
+	ShowEntity InvPreviewMesh
+	RenderWorld()
+	HideEntity InvPreviewMesh
+	CameraProjMode InvPreviewCam, 0
+End Function
+
+Function InvBuildIcons()
+	InvIconSize = InvSmall()
+
+	Local texSize% = 1
+	While texSize < InvIconSize
+		texSize = texSize*2
+	Wend
+	Local iconTex% = CreateTexture(texSize, texSize, 1)
+
+	For i% = 0 To ItemAmount-1
+		If InvIcon(i%) <> 0 Then FreeImage InvIcon(i%)
+		InvSetMesh(InvItems(i%))
+		CameraClsColor InvPreviewCam, 0, 0, 0
+		RotateEntity InvPreviewPivot, 0, 25.0, 0
+		CameraClsMode InvPreviewCam, True, True
+		InvRender(0, 0, InvIconSize, InvIconSize)
+
+		CopyRect 0, 0, InvIconSize, InvIconSize, 0, 0, BackBuffer(), TextureBuffer(iconTex)
+
+		InvIcon(i%) = CreateImage(InvIconSize, InvIconSize)
+		CopyRect 0, 0, InvIconSize, InvIconSize, 0, 0, TextureBuffer(iconTex), ImageBuffer(InvIcon(i%))
+		MaskImage InvIcon(i%), 0, 0, 0
+	Next
+
+	FreeTexture iconTex
+
+	CameraClsColor InvPreviewCam, 0, 0, 0
+	CameraClsMode InvPreviewCam, False, True
+	InvIconsDirty = False
+End Function
+
+Function InvSelectItem(i%)
+	If i% < 0 Or i% >= ItemAmount Or i% = InvSelected Then Return
+	InvSlideDir = Sgn(i%-InvSelected)
+	InvSlideStart = MilliSecs()
+	InvSelected = i%
+	InvActionSelected = 0
+	MenuMoveBar(InvActY(0))
+	MenuHoverSound()
+End Function
+
+Function InvDoAction()
+	Local item.Items = InvItems(InvSelected)
+	If item = Null Then Return
+
+	If InvActionSelected = 0 Then
+		CreateConsoleMsg("Used "+item\itemtemplate\displayname)
+		RemoveItem(item)
+	Else
+		DropItem(item)
+	EndIf
+
+	InvActionSelected = 0
+	If InvSelected >= ItemAmount Then InvSelected = ItemAmount-1
+	If InvSelected < 0 Then InvSelected = 0
+	MenuMoveBar(InvActY(0))
+	InvIconsDirty = True
+	If ItemAmount <= 0 Then InventoryResetPreview()
+End Function
+
+Function InventoryInput()
+	InvInputHandled = False
+
+	If MainMenuOpen Then Return
+
+	If KeyHit(KEY_INV) Then
+		If InvOpen Then
+			InvOpen = False
+			HidePointer()
+			UpdateMenuState()
+		ElseIf (Not IsAnyMenuOpen()) And (Not IsZombie) And KillTimer >= 0 And VomitTimer >= 0 And (Not UnableToMove) And SelectedDoor = Null And SelectedScreen = Null And EndingTimer = 0 Then
+			InvOpen = True
+			InvOpenedAt = MilliSecs()
+			InvIconsDirty = True
+			InvSlideStart = 0
+			InvActionSelected = 0
+			If InvSelected >= ItemAmount Then InvSelected = ItemAmount-1
+			If InvSelected < 0 Then InvSelected = 0
+			MenuBarPos = InvActY(0)
+			MenuBarFrom = MenuBarPos
+			MenuBarTarget = MenuBarPos
+			MenuBarStart = MilliSecs()
+			ShowPointer()
+			UpdateMenuState()
+		EndIf
+		InvInputHandled = True
+		Return
+	EndIf
+
+	If Not InvOpen Then Return
+
+	If KeyHit(1) Then
+		InvOpen = False
+		HidePointer()
+		UpdateMenuState()
+		InvInputHandled = True
+		Return
+	EndIf
+
+	If ItemAmount <= 0 Then Return
+
+	If KeyHit(203) Or KeyHit(KEY_LEFT) Then InvSelectItem(InvSelected-1)
+	If KeyHit(205) Or KeyHit(KEY_RIGHT) Then InvSelectItem(InvSelected+1)
+
+	If MouseHit1 Then
+		For k% = -3 To 3
+			Local idx% = InvSelected+k%
+			If k% <> 0 And idx% >= 0 And idx% < ItemAmount Then
+				If MouseOn(InvSlotX(k%)-InvSmall()/2.0, InvCY()-InvSmall()/2.0, InvSmall(), InvSmall()) Then InvSelectItem(idx%)
+			EndIf
+		Next
+	EndIf
+
+	Local hit% = -1
+	For i% = 0 To 1
+		If MouseOn(InvActX(), InvActY(i%), InvRowW(), 42.0*UIScale) Then hit% = i%
+	Next
+
+	Local nsel% = InvActionSelected
+	If hit% >= 0 Then nsel% = hit%
+	If KeyHit(200) Or KeyHit(KEY_UP) Or KeyHit(208) Or KeyHit(KEY_DOWN) Then nsel% = 1-InvActionSelected
+	If nsel% <> InvActionSelected Then
+		InvActionSelected = nsel%
+		MenuMoveBar(InvActY(nsel%))
+		MenuHoverSound()
+	EndIf
+
+	If KeyHit(28) Or (MouseHit1 And hit% >= 0) Then
+		MenuClick()
+		InvDoAction()
+	EndIf
+End Function
+
+Function DrawInventory()
+	If Not InvOpen Then Return
+
+	Local item.Items = Null
+	If InvSelected >= 0 And InvSelected < ItemAmount Then item = InvItems(InvSelected)
+
+	If item <> Null And InvIconsDirty Then InvBuildIcons()
+
+	Color 0, 0, 0
+	Rect 0, 0, GraphicWidth, GraphicHeight, True
+	MenuDrawStatic()
+
+	Local cx# = GraphicWidth/2.0
+	Local cy# = InvCY()
+	Local big% = InvBig()
+	Local sm% = InvSmall()
+
+	If item <> Null Then
+		InvSetMesh(item)
+		RotateEntity InvPreviewPivot, 0, ((MilliSecs()-InvOpenedAt) Mod 45000)*0.008, 0
+		InvRender(Int(cx#-big%/2.0), Int(cy#-big%/2.0), big%, big%)
+	EndIf
+
+	SetFont Font2
+	Color 255, 255, 255
+	Local hy# = GraphicHeight*0.08
+	Local hw# = MenuSpacedText(InvListX(), hy#, "INVENTORY", 10.0)
+	Rect InvListX(), hy#+StringHeight("A")/2.0+8.0*UIScale, hw#, 1, False
+
+	SetFont Font1
+	If item = Null Then
+		Color 255, 255, 255
+		MenuSpacedText(cx#-StringWidth("EMPTY")/2.0, cy#, "EMPTY")
+		Return
+	EndIf
+
+	Local t# = 1.0
+	If InvSlideStart <> 0 Then t# = MenuEaseOut(Float(MilliSecs()-InvSlideStart)/140.0)
+	For k% = -3 To 3
+		Local idx% = InvSelected+k%
+		If k% <> 0 And idx% >= 0 And idx% < ItemAmount Then
+			If InvIcon(idx%) <> 0 Then
+				Local ix# = InvSlotX(k%+InvSlideDir)*(1.0-t#) + InvSlotX(k%)*t#
+				DrawImage InvIcon(idx%), ix#-sm%/2.0, cy#-sm%/2.0
+			EndIf
+		EndIf
+	Next
+
+	MenuDrawBrackets(cx#-big%/2.0, cy#-big%/2.0, big%, big%)
+
+	SetFont Font7
+	Color 200, 200, 200
+	Text cx#, cy#+big%/2.0+18.0*UIScale, Str(InvSelected+1)+" / "+Str(ItemAmount), True, True
+
+	Local ny# = GraphicHeight*0.73
+	SetFont Font1
+	Color 255, 255, 255
+	MenuSpacedText(InvListX(), ny#, Upper(item\itemtemplate\displayname))
+	SetFont Font7
+	Color 200, 200, 200
+	InvDrawWrapped(InvListX(), ny#+26.0*UIScale, item\itemtemplate\description, GraphicWidth*0.6, 3)
+
+	SetFont Font1
+	Local rh# = 42.0*UIScale
+	MenuUpdateBar()
+	Color 80, 80, 80
+	Rect InvActX(), MenuBarPos, InvRowW(), rh#, True
+	For i% = 0 To 1
+		If i% = InvActionSelected Then
+			Color 0, 0, 0
+		Else
+			Color 255, 255, 255
+		EndIf
+		MenuSpacedText(InvActX()+18.0*UIScale, InvActY(i%)+rh#/2.0, InvActionLabel(item, i%))
+	Next
+	MenuDrawBrackets(InvActX(), MenuBarPos, InvRowW(), rh#)
 End Function

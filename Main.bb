@@ -449,8 +449,6 @@ Global LostHands%
 
 Global Injuries#, Bloodloss#, Infect#, HealTimer#
 
-Global RefinedItems%
-
 
 ;player coordinates, angle, speed, movement etc ---------------------------------------------------------------------
 Global DropSpeed#, HeadDropSpeed#, CurrSpeed#
@@ -481,7 +479,6 @@ Global SoundTransmission%
 
 ;menus, GUI ---------------------------------------------------------------------------------------------------------
 Global MainMenuOpen%, MenuOpen%, StopHidingTimer#, InvOpen%
-Global OtherOpen.Items = Null
 
 Global SelectedEnding$, EndingScreen%, EndingTimer#
 
@@ -1091,6 +1088,12 @@ End Function
 Global StaminaMeterIMG% = 0
 
 Global Panel294 = 0, Using294%, Input294$
+
+Global ViewModelMesh%, ViewModelRig%, ViewModelLight%
+Global ViewModelFrame#, ViewModelTarget#
+Global ViewModelState%, ViewModelGrabRequest%, ViewModelLast%
+Const VIEWMODEL_GRAB_DIST# = 0.75
+Const VIEWMODEL_BACK# = -0.4 ; not a very great practice but there's only so much you can do
 
 ;----------------------------------------------  Items  -----------------------------------------------------
 
@@ -1783,7 +1786,9 @@ While IsRunning
 			EndIf
 			
 		EndIf
-		
+
+		InventoryInput()
+
 		If (Not IsPaused()) And EndingTimer=>0 Then
 			LightVolume = CurveValue(TempLightVolume, LightVolume, 50.0)
 			CameraFogRange(Camera, CameraFogNear*LightVolume,CameraFogFar*LightVolume)
@@ -1805,6 +1810,7 @@ While IsRunning
 			UpdateRoomLights(Camera)
 			UpdateDecals()
 			UpdateItems()
+			UpdateViewModel()
 			UpdateParticles()
 			UpdateParticles_Time# = UpdateParticles_Time#+FPSfactor
 			If UpdateParticles_Time#=>1
@@ -1826,7 +1832,7 @@ While IsRunning
 		CatchErrors("UpdateWorld")
 		RenderWorld2()
 		
-		If KeyHit(1) And (Not ConsoleOpen) Then
+		If KeyHit(1) And (Not ConsoleOpen) And (Not InvOpen) And (Not InvInputHandled) Then
 			MenuOpen = (Not MenuOpen)
 			If MenuOpen Then
 				ShowPointer()
@@ -1836,7 +1842,7 @@ While IsRunning
 			UpdateMenuState()
 		EndIf
 
-		If KeyHit(KEY_CONSOLE) Then
+		If KeyHit(KEY_CONSOLE) And (Not InvOpen) Then
 			If CanOpenConsole
 				ConsoleOpen = (Not ConsoleOpen)
 				If SteamActive Then
@@ -1856,31 +1862,13 @@ While IsRunning
 		
 		If MsgTimer > 0 Then
 			If HUDenabled Lor HUDenabledLegacy Then
-				;If temp = True -> move the message below
-				Local temp% = False
-				If (Not InvOpen And OtherOpen = Null) Then
-					If SelectedItem <> Null
-						If SelectedItem\itemtemplate\group = "paper" Or SelectedItem\itemtemplate\name = "oldpaper"
-							temp% = True
-						EndIf
-					EndIf
-				EndIf
-				
 				Local messageOpacity% = Min(MsgTimer / 2, 255)
-				If (Not temp%)
-					; Push text up if subtitles box has lots of text.
-					Local h# = (GraphicHeight / 2) + 200
-					If SubtitlesEnabled Then h = Min(h, SubBox\curTop-SubtitleTextHeight*2)
-					Color 0,0,0
-					Text((GraphicWidth / 2)+1, h+1, Msg, True, False)
-					Color messageOpacity, messageOpacity, messageOpacity
-					Text((GraphicWidth / 2), h, Msg, True, False)
-				Else
-					Color 0,0,0
-					Text((GraphicWidth / 2)+1, (GraphicHeight * 0.94) + 1, Msg, True, False)
-					Color messageOpacity, messageOpacity, messageOpacity
-					Text((GraphicWidth / 2), (GraphicHeight * 0.94), Msg, True, False)
-				EndIf
+				Local h# = (GraphicHeight / 2) + 200
+				If SubtitlesEnabled Then h = Min(h, SubBox\curTop-SubtitleTextHeight*2)
+				Color 0,0,0
+				Text((GraphicWidth / 2)+1, h+1, Msg, True, False)
+				Color messageOpacity, messageOpacity, messageOpacity
+				Text((GraphicWidth / 2), h, Msg, True, False)
 			EndIf
 			MsgTimer=MsgTimer-FPSfactor2 
 		End If
@@ -1888,6 +1876,7 @@ While IsRunning
 		Color 255, 255, 255
 		If ShowFPS Then SetFont ConsoleFont : Text 20, 20, Format(I_Loc\HUD_Fps, FPS) : SetFont Font1
 		
+		DrawInventory()
 		DrawMenu()
 	End If
 	
@@ -1963,7 +1952,7 @@ Function UpdateMenuState()
 End Function
 
 Function IsAnyMenuOpen()
-	Return MenuOpen Lor ConsoleOpen Lor InvOpen Lor OtherOpen<>Null Lor (SelectedItem <> Null And SelectedItem\Inventory <> Null) Lor Using294
+	Return MenuOpen Lor ConsoleOpen Lor InvOpen Lor Using294
 End Function
 
 Function IsPaused()
@@ -2186,15 +2175,6 @@ Function MovePlayer()
 		EndIf
 	EndIf
 	
-	For i = 0 To MaxItemAmount-1
-		If Inventory(i)<>Null Then
-			If Inventory(i)\itemtemplate\name = "finevest" Then
-				Stamina = Min(Stamina, 60)
-				Exit
-			EndIf
-		EndIf
-	Next
-	
 	If Wearing714 Then
 		Stamina = Min(Stamina, 10)
 		Sanity = Max(-850, Sanity)
@@ -2225,12 +2205,6 @@ Function MovePlayer()
 			EndIf	
 			
 			If ForceMove>0 Then Speed=Speed*ForceMove
-			
-			If SelectedItem<>Null Then
-				If SelectedItem\itemtemplate\name = "firstaid" Or SelectedItem\itemtemplate\name = "finefirstaid" Or SelectedItem\itemtemplate\name = "firstaid2" Then 
-					Sprint = 0
-				EndIf
-			EndIf
 			
 			temp# = (Shake Mod 360)
 			Local tempchn%
@@ -2633,15 +2607,6 @@ Function CanTeleportToHalloweenRoom()
 	End Select
 End Function
 
-Function IsTeleportingFromHalloweenCandy()
-	For i.Items = Each Items
-		If i\itemtemplate\group = "candy" And i\state > 0 Then
-			Return True
-		EndIf
-	Next
-	Return False
-End Function
-
 Function TeleportFromHalloweenRoom%()
 	For r.Rooms = Each Rooms
 		If r\RoomTemplate\Name = "room4info" Then
@@ -2659,16 +2624,6 @@ Function TeleportFromHalloweenRoom%()
 	EndIf
 	Return False
 End Function
-
-Function FillHalloweenPDWithBones(r.Rooms)
-	Local i% = 0
-	While r\Objects[i] <> 0
-		CreateItem("bone", EntityX(r\Objects[i], True), EntityY(r\Objects[i], True), EntityZ(r\Objects[i], True))
-		i = i + 1
-	Wend
-End Function
-
-
 
 Function ResetDiseases()
 	DeathTimer = 0
@@ -3462,6 +3417,7 @@ Function InitNewGame()
 	DrawLoading(70)
 	InitWayPoints(71, 9)
 	DrawLoading(79)
+	InitViewModel()
 
 	For d.Doors = Each Doors
 		EntityParent(d\obj, 0)
@@ -3501,6 +3457,7 @@ Function InitNewGame()
 	If MTStartRoom <> Null Then
 		PositionEntity(Collider, EntityX(MTStartRoom\obj), EntityY(MTStartRoom\obj) + 0.5, EntityZ(MTStartRoom\obj))
 		PlayerRoom = MTStartRoom
+		it = CreateItem("heatdump", EntityX(MTStartRoom\obj)+0.6, EntityY(MTStartRoom\obj)+0.8, EntityZ(MTStartRoom\obj)+0.8)
 	EndIf
 
 	ResetAllRMeshes()
@@ -3579,10 +3536,6 @@ Function NullGame(playbuttonsfx%=True)
 				MapFound(x, y) = 0
 			Next
 		Next
-	Next
-	
-	For itt.ItemTemplates = Each ItemTemplates
-		itt\found = False
 	Next
 	
 	DropSpeed = 0
@@ -3680,12 +3633,13 @@ Function NullGame(playbuttonsfx%=True)
 	Msg = ""
 	MsgTimer = 0
 	
-	SelectedItem = Null
-	
 	For i = 0 To MaxItemAmount - 1
-		Inventory(i) = Null
+		InvItems(i) = Null
 	Next
-	SelectedItem = Null
+	ItemAmount = 0
+	InvSelected = 0
+	InvOpen = False
+	InvActionOpen = False
 	
 	ClosestButton = 0
 	
@@ -3702,13 +3656,12 @@ Function NullGame(playbuttonsfx%=True)
 	Delete Each Materials
 	Delete Each WayPoints
 	Delete Each Rooms	
-	Delete Each Inventories
 	Delete Each Items
 
+	InventoryResetPreview()
+	FreeViewModel()
+
 	For itt.ItemTemplates = Each ItemTemplates
-		FreeImageHUDScaled(itt\invimg)
-		If itt\invimg2 <> 0 Then FreeImageHUDScaled(itt\invimg2)
-		If itt\img <> 0 Then FreeImageHUDScaled(itt\img)
 		Delete itt
 	Next
 
@@ -3787,6 +3740,121 @@ Function NullGame(playbuttonsfx%=True)
 	InitFastResize()
 	
 	CatchErrors("NullGame")
+End Function
+
+Function FreeViewModel()
+	If ViewModelMesh <> 0 Then FreeEntity ViewModelMesh
+	If ViewModelLight <> 0 Then FreeEntity ViewModelLight
+	If ViewModelRig <> 0 Then FreeEntity ViewModelRig
+
+	ViewModelMesh = 0
+	ViewModelLight = 0
+	ViewModelRig = 0
+	ViewModelFrame = 0.0
+	ViewModelTarget = 0.0
+	ViewModelState = 0
+	ViewModelGrabRequest = False
+	ViewModelLast = 0
+End Function
+
+Function InitViewModel()
+	FreeViewModel()
+
+	ViewModelMesh = LoadAnimMesh("GFX\Viewmodels\fparms.fbx")
+	If ViewModelMesh = 0 Then Return
+
+	Local oldRig% = FindChild(ViewModelMesh, "Camera")
+	If oldRig = 0 Then
+		FreeEntity ViewModelMesh
+		ViewModelMesh = 0
+		Return
+	EndIf
+
+	ViewModelRig = oldRig
+
+	EntityParent ViewModelRig, 0, True
+	EntityParent ViewModelMesh, ViewModelRig, True
+	ScaleEntity ViewModelRig, 1, 1, 1, False
+	CameraProjMode ViewModelRig, 0
+
+	ViewModelLight = CreateLight(2)
+	EntityParent ViewModelLight, ViewModelRig, False
+	PositionEntity ViewModelLight, 0, 0, 0, False
+	LightRange ViewModelLight, 1.5
+	LightColor ViewModelLight, 255, 255, 255
+
+	ViewModelFrame = 0.0
+	ViewModelTarget = 4.0
+	ViewModelState = 0
+	ViewModelLast = MilliSecs()
+	HideEntity ViewModelMesh
+	SetAnimTime ViewModelMesh, ViewModelFrame
+End Function
+
+Function UpdateViewModel()
+	If ViewModelMesh = 0 Then Return
+
+	PositionEntity ViewModelRig, EntityX(Camera, True), EntityY(Camera, True), EntityZ(Camera, True), True
+	RotateEntity ViewModelRig, EntityPitch(Camera, True), EntityYaw(Camera, True), EntityRoll(Camera, True), True
+	MoveEntity ViewModelRig, 0, 0, VIEWMODEL_BACK#
+
+	If ViewModelGrabRequest Then
+		ViewModelGrabRequest = False
+		ViewModelState = 3
+		ViewModelFrame = 29.0
+		ViewModelTarget = 44.0
+	EndIf
+
+	If ViewModelState <> 3 Then
+		Local want% = 0
+		If ClosestItem <> Null Then
+			If EntityDistance(Camera, ClosestItem\collider) <= VIEWMODEL_GRAB_DIST Then
+				want = 2
+			Else
+				want = 1
+			EndIf
+		EndIf
+
+		If ViewModelState = 4 Then
+			If want = 1 Then
+				ViewModelState = 1
+				ViewModelFrame = 24.0
+				ViewModelTarget = 29.0
+			ElseIf want = 2 Then
+				ViewModelState = 2
+				ViewModelFrame = 14.0
+				ViewModelTarget = 24.0
+			Else
+				ViewModelTarget = 44.0
+			EndIf
+		Else
+			ViewModelState = want
+
+			Select ViewModelState
+				Case 0
+					ViewModelTarget = 4.0
+				Case 1
+					ViewModelTarget = 29.0
+				Case 2
+					ViewModelTarget = 24.0
+			End Select
+		EndIf
+	Else
+		If ViewModelFrame >= 44.0 Then ViewModelState = 4
+	EndIf
+
+	Local now% = MilliSecs()
+	Local dt# = Float(now-ViewModelLast)/1000.0
+	If dt# > 0.25 Then dt# = 0.25
+
+	If ViewModelFrame < ViewModelTarget Then
+		ViewModelFrame = Min(ViewModelFrame + 30.0*dt#, ViewModelTarget)
+	ElseIf ViewModelFrame > ViewModelTarget Then
+		ViewModelFrame = Max(ViewModelFrame - 30.0*dt#, ViewModelTarget)
+	EndIf
+
+	SetAnimTime ViewModelMesh, ViewModelFrame
+	ViewModelLast = now
 End Function
 
 
@@ -4890,6 +4958,21 @@ End Function
 Function RenderWorld2()
 	CatchErrors("Uncaught (RenderWorld2)")
 
+	If InvOpen Then
+		CatchErrors("RenderWorld2")
+		Return
+	EndIf
+
+	If ViewModelMesh <> 0 Then
+		If IsPaused() Then
+			HideEntity ViewModelMesh
+			If ViewModelLight <> 0 Then HideEntity ViewModelLight
+		Else
+			ShowEntity ViewModelMesh
+			If ViewModelLight <> 0 Then ShowEntity ViewModelLight
+		EndIf
+	EndIf
+
 	CameraProjMode ark_blur_cam,0
 	CameraProjMode Camera,1
 	
@@ -4902,31 +4985,7 @@ Function RenderWorld2()
 	
 	Local hasBattery% = 2
 	Local power% = 0
-	If (WearingNightVision=1) Or (WearingNightVision=2)
-		For i% = 0 To MaxItemAmount - 1
-			If (Inventory(i)<>Null) Then
-				If (WearingNightVision = 1 And Inventory(i)\itemtemplate\name = "nvgoggles") Or (WearingNightVision = 2 And Inventory(i)\itemtemplate\name = "supernv") Then
-					Inventory(i)\state = Inventory(i)\state - (FPSfactor * (0.02 * WearingNightVision))
-					power%=Int(Inventory(i)\state)
-					If Inventory(i)\state<=0.0 Then ;this nvg can't be used
-						hasBattery = 0
-						Msg = I_Loc\MessageItem_NvgBatDead
-						BlinkTimer = -1.0
-						MsgTimer = 350
-						Exit
-					ElseIf Inventory(i)\state<=100.0 Then
-						hasBattery = 1
-					EndIf
-				EndIf
-			EndIf
-		Next
-		
-		If (hasBattery) Then
-			RenderWorld()
-		EndIf
-	Else
-		RenderWorld()
-	EndIf
+	RenderWorld()
 	
 	CurrTrisAmount = TrisRendered()
 
@@ -5235,29 +5294,6 @@ Function PlayEpilepsyWarning()
 	FlushMouse()
 	Cls
 	Flip
-End Function
-
-Function CanUseItem(canUseWithHazmat%, canUseWithGasMask%, canUseWithEyewear%)
-	If (canUseWithHazmat = False And WearingHazmat<>0) Then
-		Msg = I_Loc\MessageItem_HazmatNouse
-		MsgTimer = 70*5
-		Return False
-	ElseIf (canUseWithGasMask = False And (WearingGasMask<>0 Or Wearing1499<>0))
-		Msg = I_Loc\MessageItem_GasmaskNouse
-		MsgTimer = 70*5
-		Return False
-	ElseIf (canUseWithEyewear = False And (WearingNightVision<>0 Or WearingPumpkin<>0))
-		Msg = I_Loc\MessageItem_NvgNouse
-		MsgTimer = 70*5
-		Return False
-	EndIf
-	
-	Return True
-End Function
-
-Function TakeOffPumpkin()
-	If WearingPumpkin Then NoTarget = False
-	WearingPumpkin = False
 End Function
 
 Function ResetInput()

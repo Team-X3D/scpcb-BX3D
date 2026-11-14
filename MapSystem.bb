@@ -1152,21 +1152,6 @@ Function PlaceForest(fr.Forest,x#,y#,z#,r.Rooms)
 					
 					ScaleEntity tile_entity,tempf1,tempf1,tempf1
 					
-					Local itemPlaced[4]
-					;2, 5, 8
-					Local it.Items = Null
-					If (ty Mod 3)=2 And itemPlaced[Floor(ty/3)]=False Then
-						itemPlaced[Floor(ty/3)]=True
-						If tile_type=ROOM1 Then
-							it.Items = CreateItem("log"+Int(Floor(ty/3)+1), 0.4,0.2,0)
-						ElseIf tile_type=ROOM2C
-							it.Items = CreateItem("log"+Int(Floor(ty/3)+1), 1.7,0.2,-0.4)
-						Else
-							it.Items = CreateItem("log"+Int(Floor(ty/3)+1), 0,0.2,0)
-						EndIf
-						EntityParent(it\collider, tile_entity)
-					EndIf
-					
 					TurnEntity tile_entity, 0, angle, 0
 					
 					PositionEntity tile_entity,x+(tx*tile_size),y,z+(ty*tile_size),True
@@ -1175,8 +1160,6 @@ Function PlaceForest(fr.Forest,x#,y#,z#,r.Rooms)
 					EntityFX tile_entity,1
 					EntityParent tile_entity,fr\Forest_Pivot
 					EntityPickMode tile_entity,2
-					
-					If it<>Null Then EntityParent it\collider,0
 					
 					fr\TileEntities[tx+(ty*gridsize)] = tile_entity
 				Else
@@ -1315,21 +1298,6 @@ Function PlaceForest_MapCreator(fr.Forest,x#,y#,z#,r.Rooms)
 					
 					ScaleEntity tile_entity,tempf1,tempf1,tempf1
 					
-					Local itemPlaced[4]
-					;2, 5, 8
-					Local it.Items = Null
-					If (ty Mod 3)=2 And itemPlaced[Floor(ty/3)]=False Then
-						itemPlaced[Floor(ty/3)]=True
-						If tile_type=ROOM1 Then
-							it.Items = CreateItem("log"+Int(Floor(ty/3)+1), 0.4,0.2,0)
-						ElseIf tile_type=ROOM2C
-							it.Items = CreateItem("log"+Int(Floor(ty/3)+1), 1.7,0.2,-0.4)
-						Else
-							it.Items = CreateItem("log"+Int(Floor(ty/3)+1), 0,0.2,0)
-						EndIf
-						EntityParent(it\collider, tile_entity)
-					EndIf
-					
 					TurnEntity tile_entity, 0, angle, 0
 					
 					PositionEntity tile_entity,x+(tx*tile_size),y,z+(ty*tile_size),True
@@ -1340,8 +1308,6 @@ Function PlaceForest_MapCreator(fr.Forest,x#,y#,z#,r.Rooms)
 					EntityFX tile_entity,1
 					EntityParent tile_entity,fr\Forest_Pivot
 					EntityPickMode tile_entity,2
-					
-					If it<>Null Then EntityParent it\collider,0
 					
 					fr\TileEntities[tx+(ty*gridsize)] = tile_entity
 				Else
@@ -1836,7 +1802,7 @@ Const MT_HEIGHT# = 16.0
 Function PlaceGrid_MapCreator(r.Rooms)
 	Local x,y,i
 	Local Meshes[7]
-	Local dr.Doors,it.Items
+	Local dr.Doors
 	
 	For i=0 To 6
 		Meshes[i]=CopyEntity(OBJTunnel(i))
@@ -1885,9 +1851,6 @@ Function PlaceGrid_MapCreator(r.Rooms)
 						EndIf
 					Case ROOM4+2
 						AddLight%(Null, r\x+x*2.0-(Sin(EntityYaw(tile_entity,True))*504.0*RoomScale)+(Cos(EntityYaw(tile_entity,True))*16.0*RoomScale), MT_HEIGHT+(396.0*RoomScale), r\z+y*2.0+(Cos(EntityYaw(tile_entity,True))*504.0*RoomScale)+(Sin(EntityYaw(tile_entity,True))*16.0*RoomScale), 2, 500.0 * RoomScale, 255, 200, 200)
-						it = CreateItem("scp500",r\x+x*2.0+(Cos(EntityYaw(tile_entity,True))*(-208.0)*RoomScale)-(Sin(EntityYaw(tile_entity,True))*1226.0*RoomScale),MT_HEIGHT+(80.0*RoomScale),r\z+y*2.0+(Sin(EntityYaw(tile_entity,True))*(-208.0)*RoomScale)+(Cos(EntityYaw(tile_entity,True))*1226.0*RoomScale))
-						
-						it = CreateItem("nvgoggles",r\x+x*2.0-(Sin(EntityYaw(tile_entity,True))*504.0*RoomScale)+(Cos(EntityYaw(tile_entity,True))*16.0*RoomScale), MT_HEIGHT+(80.0*RoomScale), r\z+y*2.0+(Cos(EntityYaw(tile_entity,True))*504.0*RoomScale)+(Sin(EntityYaw(tile_entity,True))*16.0*RoomScale))
 				End Select
 				
 				r\grid\Entities[x+(y*gridsz)]=tile_entity
@@ -2800,7 +2763,6 @@ Function UpdateScreens()
 					DrawHandIcon=True
 					If MouseUp1 Then 
 						SelectedScreen=s
-						SelectedItem = Null
 						s\img = LoadImage_Strict("GFX\screens\"+s\imgpath, UIScale)
 						PlaySound_Strict ButtonSFX
 						MouseUp1=False
