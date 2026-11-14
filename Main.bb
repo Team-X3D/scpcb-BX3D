@@ -1,6 +1,6 @@
-Const VersionNumber$ = "1.3.12.7.1"
+Const VersionNumber$ = "0.0.1"
 ;Only change this if the version given isn't working with the current build version - ENDSHN
-Const CompatibleNumber$ = "1.3.12.7.1"
+Const CompatibleNumber$ = "0.0.1"
 
 SetDarkMode(True)
 
@@ -119,7 +119,7 @@ Global HasDubbedAudio%
 Global ModsEnabled% = GetOptionInt("general", "enable mods") And (Not HasCLIFlag("nomods"))
 If ModsEnabled Then ReloadMods()
 
-Global Font1%, Font2%, Font3%, Font4%, Font5%, Font6%
+Global Font1%, Font2%, Font3%, Font4%, Font5%, Font6%, Font7%
 Global ConsoleFont%
 
 Global MenuWhite%, MenuBlack%
@@ -331,6 +331,7 @@ Global ScreenGamma# = GetOptionFloat("graphics", "screengamma")
 ;If Fullscreen Then UpdateScreenGamma()
 
 Global ViewBobScale# = GetOptionFloat("graphics", "view bob")
+Global BobPhase#, BobPowerSmooth#
 
 Global FOV% = GetOptionInt("graphics", "fov")
 Const DEFAULT_FOV% = 59
@@ -378,6 +379,7 @@ Font3% = LoadFont_Strict("GFX\font\arial\Arial.ttf", Int(15 * HUDScale))
 Font4% = LoadFont_Strict("GFX\font\arial\Arial.ttf", Int(42 * HUDScale))
 Font5% = LoadFont_Strict("GFX\font\arial\Arialbd.ttf", Int(58 * UIScale))
 Font6% = LoadFont_Strict("GFX\font\arial\Arial.ttf", Int(25 * UIScale))
+Font7% = LoadFont_Strict("GFX\font\arial\Arialbd.ttf", Int(13 * UIScale))
 
 Global CreditsFont%,CreditsFont2%
 
@@ -387,11 +389,10 @@ Include "Subtitles.bb"
 LoadSubtitles()
 
 SetFont Font2
+PlayEpilepsyWarning()
 
 Global BlinkMeterIMG% = LoadImageHUDScaled("GFX\blinkmeter.png")
 Global MenuMeterIMG% = LoadImage_Strict("GFX\blinkmeter.png", UIScale)
-
-DrawLoading(0, True)
 
 ; - -Viewport.
 Global viewport_center_x% = RealGraphicWidth / 2, viewport_center_y% = RealGraphicHeight / 2
@@ -880,8 +881,6 @@ MusicCHN = StreamSound_Strict("SFX\Music\"+Music(2)+".ogg",MusicVolume)
 Global CurrMusicVolume# = 1.0, NowPlaying%=2, ShouldPlay%=11
 Global CurrMusic% = 1
 
-DrawLoading(10, True)
-
 Dim OpenDoorSFX%(3,3), CloseDoorSFX%(3,3)
 
 Global ButtonSFX2 
@@ -912,8 +911,6 @@ Global EndBreathSFX%
 Dim DecaySFX%(5)
 
 Global BurstSFX 
-
-DrawLoading(20, True)
 
 Dim RustleSFX%(3)
 
@@ -952,9 +949,6 @@ Dim Scp173SFX%(3)
 
 Dim HorrorSFX%(20)
 
-
-DrawLoading(25, True)
-
 Dim IntroSFX%(20)
 
 ;IntroSFX(13) = LoadSound_Strict("SFX\intro\shoot1.ogg")
@@ -988,8 +982,6 @@ Global CurrStepSFX
 Dim StepSFX%(5, 2, 8) ;(normal/metal, walk/run, id)
 
 Dim Step2SFX(6)
-
-DrawLoading(30, True)
 
 ;[End block]
 
@@ -1099,8 +1091,6 @@ End Function
 Global StaminaMeterIMG% = 0
 
 Global Panel294 = 0, Using294%, Input294$
-
-DrawLoading(35, True)
 
 ;----------------------------------------------  Items  -----------------------------------------------------
 
@@ -1562,14 +1552,10 @@ Function RemoveDoor(d.Doors)
 	Delete d
 End Function
 
-DrawLoading(40,True)
-
 Global DebugMapGen% = GetOptionInt("debug", "show map gen")
 Global DebugForestGen% = GetOptionInt("debug", "show forest gen")
 
 Include "MapSystem.bb"
-
-DrawLoading(80,True)
 
 Include "NPCs.bb"
 
@@ -1580,8 +1566,6 @@ Collisions HIT_PLAYER, HIT_PLAYER, 1, 3
 Collisions HIT_ITEM, HIT_MAP, 2, 2
 Collisions HIT_APACHE, HIT_APACHE, 1, 2
 Collisions HIT_DEAD, HIT_MAP, 2, 2
-
-DrawLoading(90, True)
 
 ;----------------------------------- meshes and textures ----------------------------------------------------------------
 Include "Effects.bb"
@@ -1642,8 +1626,6 @@ MainMenuOpen = True
 
 FlushKeys()
 FlushMouse()
-
-DrawLoading(100, True)
 
 LoopDelay = MilliSecs()
 AccumulatedLoopDelay = 0.0
@@ -2127,9 +2109,6 @@ Function DrawCredits()
         ShouldPlay = 21
         MenuOpen = False
         MainMenuOpen = True
-        MainMenuTab = 0
-		PrevSave = ""
-        CurrSave = ""
         FlushKeys()
 	EndIf
     
@@ -2520,15 +2499,28 @@ Function MouseLook(handleInput% = True)
 		EndIf
 		;EndIf
 		
-		Local up# = (Sin(Shake) / (20.0+CrouchState*20.0))*0.6*ViewBobScale;, side# = Cos(Shake / 2.0) / 35.0		
 		Local roll# = Max(Min(Sin(Shake/2)*2.5*Min(Injuries+0.25,3.0),8.0),-8.0)*ViewBobScale
-		
-		;käännetään kameraa sivulle jos pelaaja on vammautunut
-		;RotateEntity Collider, EntityPitch(Collider), EntityYaw(Collider), Max(Min(up*30*Injuries,50),-50)
+
+		Local bobAmount# = Min(CurrSpeed / 0.018, 2.5)
+		Local bobTarget# = Min(bobAmount, 1.8)
+		BobPowerSmooth = CurveValue(bobTarget, BobPowerSmooth, 10.0)
+		Local bobPower# = BobPowerSmooth
+		Local bobScale# = ViewBobScale * (1.0 - CrouchState*0.65)
+
+		If bobAmount > 0.02 Then
+			BobPhase = BobPhase + FPSfactor * (6.28318 * (1.25 + bobAmount*0.35) / 70.0)
+			If BobPhase > 6.28318 Then BobPhase = BobPhase - 6.28318
+		EndIf
+
+		Local side# = Sin(BobPhase) * 0.028 * bobPower * bobScale
+		Local up# = (Sin(Shake) / (20.0+CrouchState*20.0))*0.6*ViewBobScale
+		Local fwd# = Cos(BobPhase*2.0) * 0.012 * bobPower * bobScale
+		Local bobRoll# = Sin(BobPhase) * 1.2 * bobPower * bobScale
+
 		PositionEntity Camera, EntityX(Collider), EntityY(Collider), EntityZ(Collider)
-		RotateEntity Camera, 0, EntityYaw(Collider), roll*0.5
-		
-		MoveEntity Camera, side, up + 0.6 + CrouchState * -0.3, 0
+		RotateEntity Camera, 0, EntityYaw(Collider), (roll + bobRoll)*0.5
+
+		MoveEntity Camera, side, up + 0.6 + CrouchState * -0.3, fwd
 		
 		;RotateEntity Collider, EntityPitch(Collider), EntityYaw(Collider), 0
 		;moveentity player, side, up, 0	
@@ -2560,7 +2552,7 @@ Function MouseLook(handleInput% = True)
 		If user_camera_pitch# > 70.0 Then user_camera_pitch# = 70.0
 		If user_camera_pitch# < - 70.0 Then user_camera_pitch# = -70.0
 		
-		RotateEntity Camera, WrapAngle(user_camera_pitch + Rnd(-CameraShake*FPSfactor, CameraShake*FPSfactor) * ViewBobScale), WrapAngle(EntityYaw(Collider) + Rnd(-CameraShake*FPSfactor, CameraShake*FPSfactor) * ViewBobScale), roll ; Pitch the user;s camera up And down.
+		RotateEntity Camera, WrapAngle(user_camera_pitch + Rnd(-CameraShake*FPSfactor, CameraShake*FPSfactor) * ViewBobScale), WrapAngle(EntityYaw(Collider) + Rnd(-CameraShake*FPSfactor, CameraShake*FPSfactor) * ViewBobScale), roll + bobRoll ; Pitch the user;s camera up And down.
 		
 		If PlayerRoom\RoomTemplate\Name = "pocketdimension" Lor PlayerRoom\RoomTemplate\Name = "halloweenpd" Then
 			If EntityY(Collider)<2000*RoomScale Or EntityY(Collider)>2608*RoomScale Then
@@ -2777,38 +2769,74 @@ Function DrawGUI()
 	Local cx% = GraphicWidth/2
 	Local cy% = GraphicHeight/2
 	Rect cx-1,cy-1,3,3,True
+
+	Local pw% = Int(250*UIScale)
+	Local ph% = Int(104*UIScale)
+	Local px% = GraphicWidth-pw-Int(24*UIScale)
+	Local py% = GraphicHeight-ph-Int(24*UIScale)
+	Local bw% = pw-Int(28*UIScale)
+	Local health# = Max(Min(100.0-Injuries,100.0),0.0)
+	Local stamina# = Max(Min(Stamina,100.0),0.0)
+
+	For i% = 1 To ph-2
+		Local shade% = 24-Int(20.0*i%/ph)
+		Color shade,shade,shade
+		Rect px+1,py+i%,pw-2,1,False
+	Next
+
+	Color 255,255,255
+	Local b% = Int(8*UIScale)
+	Rect px,py,b,1,False
+	Rect px,py,1,b,False
+	Rect px+pw-b,py,b,1,False
+	Rect px+pw-1,py,1,b,False
+	Rect px,py+ph-1,b,1,False
+	Rect px,py+ph-b,1,b,False
+	Rect px+pw-b,py+ph-1,b,1,False
+	Rect px+pw-1,py+ph-b,1,b,False
+
+	Color 255,255,255
+	SetFont Font7
+	Text px+Int(14*UIScale),py+Int(10*UIScale),"HEALTH",False,False
+	Color 45,45,45
+	Rect px+Int(14*UIScale),py+Int(28*UIScale),bw,Int(8*UIScale),True
+	Color 255,255,255
+	Rect px+Int(14*UIScale),py+Int(28*UIScale),bw*health/100.0,Int(8*UIScale),True
+
+	Text px+Int(14*UIScale),py+Int(52*UIScale),"STAMINA",False,False
+	Color 45,45,45
+	Rect px+Int(14*UIScale),py+Int(70*UIScale),bw,Int(8*UIScale),True
+	Color 255,255,255
+	Rect px+Int(14*UIScale),py+Int(70*UIScale),bw*stamina/100.0,Int(8*UIScale),True
+	SetFont Font1
 End Function
 
 Function DrawMenu()
-	If Not MenuOpen Then Return
+	If Not MenuOpen Then
+		MenuWasOpen = False
+		Return
+	EndIf
 
-	ShowPointer()
-	Color 0,0,0
-	Rect 0,0,GraphicWidth,GraphicHeight,True
+	If Not MenuWasOpen Then
+		MenuSetup(2)
+		MenuWasOpen = True
+	EndIf
 
-	Local w% = 260*UIScale
-	Local x% = (GraphicWidth-w)/2
-	Local y% = GraphicHeight/2-90*UIScale
+	Local act% = MenuInput()
+	MenuDraw()
 
-	SetFont Font2
-	Color 255,255,255
-	Text GraphicWidth/2, y-60*UIScale, "PAUSED", True
-	SetFont Font1
-
-	If DrawButton(x,y,w,50*UIScale,"RESUME") Then
+	If act% = 0 Then
 		MenuOpen = False
 		HidePointer()
 		UpdateMenuState()
-	EndIf
-
-	If DrawButton(x,y+70*UIScale,w,50*UIScale,"QUIT TO TITLE") Then
+	ElseIf act% = 1 Then
 		MenuOpen = False
 		NullGame(False)
 		MainMenuOpen = True
+		MenuWasOpen = False
+	ElseIf act% = 2 Then
+		End
 	EndIf
-
-	If DrawButton(x,y+140*UIScale,w,50*UIScale,"QUIT") Then End
-
 End Function
 
 
@@ -3584,6 +3612,8 @@ Function NullGame(playbuttonsfx%=True)
 	
 	CameraShake = 0
 	Shake = 0
+	BobPhase = 0
+	BobPowerSmooth = 0
 	LightFlash = 0
 	
 	user_camera_pitch = 0.0
@@ -5177,6 +5207,32 @@ Function PlayStartupVideos()
 
 	FreeSound snd
 	FreeImage img
+	Cls
+	Flip
+End Function
+
+Function PlayEpilepsyWarning()
+	If IsRestart Or HasCLIFlag("novid") Then Return
+
+	FlushKeys()
+	FlushMouse()
+
+	Cls
+	Color 255,255,255
+	SetFont Font2
+	Text GraphicWidth/2, GraphicHeight*0.34, "EPILEPSY WARNING", True
+	SetFont Font1
+	Text GraphicWidth/2, GraphicHeight*0.46, "This game contains flashing imagery and rapid visual patterns.", True
+	Text GraphicWidth/2, GraphicHeight*0.52, "Do not continue if you are sensitive to flashing lights.", True
+	Text GraphicWidth/2, GraphicHeight*0.68, "Press any key or click to continue.", True
+	Flip
+
+	While GetKey() = 0 And MouseHit(1) = 0
+		Delay 30
+	Wend
+
+	FlushKeys()
+	FlushMouse()
 	Cls
 	Flip
 End Function
