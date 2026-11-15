@@ -53,7 +53,6 @@ For i = 0 To 2
 	RustleSFX(i) = LoadSound_Strict("SFX\SCP\372\Rustle" + i + ".ogg")
 Next
 
-Death914SFX% = LoadSound_Strict("SFX\SCP\914\PlayerDeath.ogg") 
 Use914SFX% = LoadSound_Strict("SFX\SCP\914\PlayerUse.ogg")
 
 ;Dim DripSFX%(4)
@@ -144,8 +143,6 @@ AlarmSFX(3) = LoadSound_Strict("SFX\Alarm\Alarm4.ogg")
 AlarmSFX(4) = LoadSound_Strict("SFX\Alarm\Alarm5.ogg")
 
 ;Dim CommotionState%(23)
-
- HeartBeatSFX = LoadSound_Strict("SFX\Character\D9341\Heartbeat.ogg")
 
  ;VomitSFX%
 

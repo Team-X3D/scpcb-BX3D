@@ -256,7 +256,6 @@ Type LocalizationTable
     Field Message_1048a3$[4]
     Field Message_1162ExchangeFailure$
     Field Message_1162ExchangeSuccess$
-    Field Message_BloodlossFaint$
     Field Message_Stophiding$
     Field MessageButton_KeyRequired$
     Field MessageButton_KeyRequiredLevel$
@@ -399,55 +398,6 @@ Type LocalizationTable
     Field MessageShot_Rightleg$
     Field MessageShot_Rightshoulder$
     Field MessageShot_Leftshoulder$
-    Field DeathMessage_008$
-    Field DeathMessage_008Gate$
-    Field DeathMessage_008GateA$
-    Field DeathMessage_008GateB$
-    Field DeathMessage_008zombie$
-    Field DeathMessage_012$
-    Field DeathMessage_035Chamber$
-    Field DeathMessage_035Tentacle$
-    Field DeathMessage_035TentacleOffice$
-    Field DeathMessage_049$
-    Field DeathMessage_049Chamber$
-    Field DeathMessage_0492$
-    Field DeathMessage_096$
-    Field DeathMessage_106Pd$
-    Field DeathMessage_106PdCrushed$
-    Field DeathMessage_106PdFall$
-    Field DeathMessage_173$
-    Field DeathMessage_173Camera$
-    Field DeathMessage_173Intro$
-    Field DeathMessage_173Doors$
-    Field DeathMessage_205$
-    Field DeathMessage_330$
-    Field DeathMessage_420js$
-    Field DeathMessage_427$
-    Field DeathMessage_895$
-    Field DeathMessage_895Nvg$
-    Field DeathMessage_895Finenvg$
-    Field DeathMessage_914Rough$
-    Field DeathMessage_914Superman$
-    Field DeathMessage_939$
-    Field DeathMessage_1025Cardiacarrest$
-    Field DeathMessage_1123$
-    Field DeathMessage_1048a$
-    Field DeathMessage_1162$
-    Field DeathMessage_1499$
-    Field DeathMessage_14991$
-    Field DeathMessage_14991Dimension$
-    Field DeathMessage_GuardIntro$
-    Field DeathMessage_GuardGateB$
-    Field DeathMessage_Apache$
-    Field DeathMessage_ApacheGateA$
-    Field DeathMessage_ApacheGateB$
-    Field DeathMessage_Ntf$
-    Field DeathMessage_NtfBloodloss$
-    Field DeathMessage_Tesla$
-    Field DeathMessage_Killbat$
-    Field DeathMessage_KillbatOutside$
-    Field DeathMessage_Suicide$[4]
-    Field DeathMessage_Gassed$
     Field Cup_Of$
     Field Cup_OfPrefix$[2]
     Field Cup_Coffee$
@@ -807,7 +757,6 @@ Function LoadLocalization(loc.LocalizationTable, file$)
                             Case "1048a.3_4" If loc\Message_1048a3[4] = "" Then loc\Message_1048a3[4] = value
                             Case "1162.exchange.failure" If loc\Message_1162ExchangeFailure = "" Then loc\Message_1162ExchangeFailure = value
                             Case "1162.exchange.success" If loc\Message_1162ExchangeSuccess = "" Then loc\Message_1162ExchangeSuccess = value
-                            Case "bloodloss.faint" If loc\Message_BloodlossFaint = "" Then loc\Message_BloodlossFaint = value
                             Case "stophiding" If loc\Message_Stophiding = "" Then loc\Message_Stophiding = value
                         End Select
                     Case "Message Button"
@@ -969,61 +918,6 @@ Function LoadLocalization(loc.LocalizationTable, file$)
                             Case "rightleg" If loc\MessageShot_Rightleg = "" Then loc\MessageShot_Rightleg = value
                             Case "rightshoulder" If loc\MessageShot_Rightshoulder = "" Then loc\MessageShot_Rightshoulder = value
                             Case "leftshoulder" If loc\MessageShot_Leftshoulder = "" Then loc\MessageShot_Leftshoulder = value
-                        End Select
-                    Case "Death Message"
-                        Select key
-                            Case "008" If loc\DeathMessage_008 = "" Then loc\DeathMessage_008 = value
-                            Case "008.gate" If loc\DeathMessage_008Gate = "" Then loc\DeathMessage_008Gate = value
-                            Case "008.gate.a" If loc\DeathMessage_008GateA = "" Then loc\DeathMessage_008GateA = value
-                            Case "008.gate.b" If loc\DeathMessage_008GateB = "" Then loc\DeathMessage_008GateB = value
-                            Case "008zombie" If loc\DeathMessage_008zombie = "" Then loc\DeathMessage_008zombie = value
-                            Case "012" If loc\DeathMessage_012 = "" Then loc\DeathMessage_012 = value
-                            Case "035.chamber" If loc\DeathMessage_035Chamber = "" Then loc\DeathMessage_035Chamber = value
-                            Case "035.tentacle" If loc\DeathMessage_035Tentacle = "" Then loc\DeathMessage_035Tentacle = value
-                            Case "035.tentacle.office" If loc\DeathMessage_035TentacleOffice = "" Then loc\DeathMessage_035TentacleOffice = value
-                            Case "049" If loc\DeathMessage_049 = "" Then loc\DeathMessage_049 = value
-                            Case "049.chamber" If loc\DeathMessage_049Chamber = "" Then loc\DeathMessage_049Chamber = value
-                            Case "0492" If loc\DeathMessage_0492 = "" Then loc\DeathMessage_0492 = value
-                            Case "096" If loc\DeathMessage_096 = "" Then loc\DeathMessage_096 = value
-                            Case "106.pd" If loc\DeathMessage_106Pd = "" Then loc\DeathMessage_106Pd = value
-                            Case "106.pd.crushed" If loc\DeathMessage_106PdCrushed = "" Then loc\DeathMessage_106PdCrushed = value
-                            Case "106.pd.fall" If loc\DeathMessage_106PdFall = "" Then loc\DeathMessage_106PdFall = value
-                            Case "173" If loc\DeathMessage_173 = "" Then loc\DeathMessage_173 = value
-                            Case "173.camera" If loc\DeathMessage_173Camera = "" Then loc\DeathMessage_173Camera = value
-                            Case "173.intro" If loc\DeathMessage_173Intro = "" Then loc\DeathMessage_173Intro = value
-                            Case "173.doors" If loc\DeathMessage_173Doors = "" Then loc\DeathMessage_173Doors = value
-                            Case "205" If loc\DeathMessage_205 = "" Then loc\DeathMessage_205 = value
-                            Case "330" If loc\DeathMessage_330 = "" Then loc\DeathMessage_330 = value
-                            Case "420js" If loc\DeathMessage_420js = "" Then loc\DeathMessage_420js = value
-                            Case "427" If loc\DeathMessage_427 = "" Then loc\DeathMessage_427 = value
-                            Case "895" If loc\DeathMessage_895 = "" Then loc\DeathMessage_895 = value
-                            Case "895.nvg" If loc\DeathMessage_895Nvg = "" Then loc\DeathMessage_895Nvg = value
-                            Case "895.finenvg" If loc\DeathMessage_895Finenvg = "" Then loc\DeathMessage_895Finenvg = value
-                            Case "914.rough" If loc\DeathMessage_914Rough = "" Then loc\DeathMessage_914Rough = value
-                            Case "914.superman" If loc\DeathMessage_914Superman = "" Then loc\DeathMessage_914Superman = value
-                            Case "939" If loc\DeathMessage_939 = "" Then loc\DeathMessage_939 = value
-                            Case "1025.cardiacarrest" If loc\DeathMessage_1025Cardiacarrest = "" Then loc\DeathMessage_1025Cardiacarrest = value
-                            Case "1123" If loc\DeathMessage_1123 = "" Then loc\DeathMessage_1123 = value
-                            Case "1048a" If loc\DeathMessage_1048a = "" Then loc\DeathMessage_1048a = value
-                            Case "1162" If loc\DeathMessage_1162 = "" Then loc\DeathMessage_1162 = value
-                            Case "1499" If loc\DeathMessage_1499 = "" Then loc\DeathMessage_1499 = value
-                            Case "14991" If loc\DeathMessage_14991 = "" Then loc\DeathMessage_14991 = value
-                            Case "14991.dimension" If loc\DeathMessage_14991Dimension = "" Then loc\DeathMessage_14991Dimension = value
-                            Case "guard.intro" If loc\DeathMessage_GuardIntro = "" Then loc\DeathMessage_GuardIntro = value
-                            Case "guard.gate.b" If loc\DeathMessage_GuardGateB = "" Then loc\DeathMessage_GuardGateB = value
-                            Case "apache" If loc\DeathMessage_Apache = "" Then loc\DeathMessage_Apache = value
-                            Case "apache.gate.a" If loc\DeathMessage_ApacheGateA = "" Then loc\DeathMessage_ApacheGateA = value
-                            Case "apache.gate.b" If loc\DeathMessage_ApacheGateB = "" Then loc\DeathMessage_ApacheGateB = value
-                            Case "ntf" If loc\DeathMessage_Ntf = "" Then loc\DeathMessage_Ntf = value
-                            Case "ntf.bloodloss" If loc\DeathMessage_NtfBloodloss = "" Then loc\DeathMessage_NtfBloodloss = value
-                            Case "tesla" If loc\DeathMessage_Tesla = "" Then loc\DeathMessage_Tesla = value
-                            Case "killbat" If loc\DeathMessage_Killbat = "" Then loc\DeathMessage_Killbat = value
-                            Case "killbat.outside" If loc\DeathMessage_KillbatOutside = "" Then loc\DeathMessage_KillbatOutside = value
-                            Case "suicide_1" If loc\DeathMessage_Suicide[1] = "" Then loc\DeathMessage_Suicide[1] = value
-                            Case "suicide_2" If loc\DeathMessage_Suicide[2] = "" Then loc\DeathMessage_Suicide[2] = value
-                            Case "suicide_3" If loc\DeathMessage_Suicide[3] = "" Then loc\DeathMessage_Suicide[3] = value
-                            Case "suicide_4" If loc\DeathMessage_Suicide[4] = "" Then loc\DeathMessage_Suicide[4] = value
-                            Case "gassed" If loc\DeathMessage_Gassed = "" Then loc\DeathMessage_Gassed = value
                         End Select
                     Case "Cup"
                         Select key

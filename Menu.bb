@@ -583,7 +583,7 @@ Function InventoryInput()
 			InvOpen = False
 			HidePointer()
 			UpdateMenuState()
-		ElseIf (Not IsAnyMenuOpen()) And (Not IsZombie) And KillTimer >= 0 And VomitTimer >= 0 And (Not UnableToMove) And SelectedDoor = Null And SelectedScreen = Null And EndingTimer = 0 Then
+		ElseIf (Not IsAnyMenuOpen()) And (Not IsZombie) And VomitTimer >= 0 And (Not UnableToMove) And SelectedDoor = Null And SelectedScreen = Null And EndingTimer = 0 Then
 			InvOpen = True
 			InvOpenedAt = MilliSecs()
 			InvIconsDirty = True

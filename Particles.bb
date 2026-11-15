@@ -138,19 +138,14 @@ Function UpdateEmitters()
 	
 	If InSmoke Then
 		If EyeIrritation > (70 * 6) Then BlurVolume = Max(BlurVolume, (EyeIrritation - (70 * 6)) / (70.0 * 24.0))
-		If EyeIrritation > (70 * 24) Then 
-			DeathMSG = I_Loc\DeathMessage_Gassed
-			Kill()
-		EndIf
+		If EyeIrritation > (70 * 24) Then DamagePlayer(MAX_HEALTH, "gas")
 		
-		If KillTimer => 0 Then 
-			If Rand(150/FPSfactor) = 1 Then
-				If CoughCHN = 0 Then
-					CoughCHN = PlaySound_Strict(CoughSFX(Rand(0, 2)))
-				Else
-					If Not ChannelPlaying(CoughCHN) Then CoughCHN = PlaySound_Strict(CoughSFX(Rand(0, 2)))
-				End If
-			EndIf
+		If Rand(150/FPSfactor) = 1 Then
+			If CoughCHN = 0 Then
+				CoughCHN = PlaySound_Strict(CoughSFX(Rand(0, 2)))
+			Else
+				If Not ChannelPlaying(CoughCHN) Then CoughCHN = PlaySound_Strict(CoughSFX(Rand(0, 2)))
+			End If
 		EndIf
 		
 		EyeIrritation=EyeIrritation+FPSfactor * 4
@@ -253,19 +248,14 @@ Function UpdateDevilEmitters()
 	
 	If InSmoke Then
 		If EyeIrritation > (70 * 6) Then BlurVolume = Max(BlurVolume, (EyeIrritation - (70 * 6)) / (70.0 * 24.0))
-		If EyeIrritation > (70 * 24) Then 
-			DeathMSG = I_Loc\DeathMessage_Gassed
-			Kill()
-		EndIf
+		If EyeIrritation > (70 * 24) Then DamagePlayer(MAX_HEALTH, "gas")
 		
-		If KillTimer => 0 Then 
-			If Rand(150/FPSfactor) = 1 Then
-				If CoughCHN = 0 Then
-					CoughCHN = PlaySound_Strict(CoughSFX(Rand(0, 2)))
-				Else
-					If Not ChannelPlaying(CoughCHN) Then CoughCHN = PlaySound_Strict(CoughSFX(Rand(0, 2)))
-				End If
-			EndIf
+		If Rand(150/FPSfactor) = 1 Then
+			If CoughCHN = 0 Then
+				CoughCHN = PlaySound_Strict(CoughSFX(Rand(0, 2)))
+			Else
+				If Not ChannelPlaying(CoughCHN) Then CoughCHN = PlaySound_Strict(CoughSFX(Rand(0, 2)))
+			End If
 		EndIf
 		
 		EyeIrritation=EyeIrritation+FPSfactor * 4

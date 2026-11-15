@@ -423,7 +423,10 @@ Global Mesh_MaxX#, Mesh_MaxY#, Mesh_MaxZ#
 Global Mesh_MagX#, Mesh_MagY#, Mesh_MagZ#
 
 ;player stats -------------------------------------------------------------------------------------------------------
-Global KillTimer#, KillAnim%, FallTimer#, DeathTimer#
+Const MAX_HEALTH# = 100.0
+Global Health# = MAX_HEALTH
+Global DeathCause$, DeathPending% = False
+Global FallTimer#
 Global Sanity#, ForceMove#, ForceAngle#
 Global RestoreSanity%
 
@@ -438,8 +441,6 @@ Global CameraShakeTimer#, Vomit%, VomitTimer#, Regurgitate%
 
 Global SCP1025state#[6]
 
-Global HeartBeatRate#, HeartBeatTimer#, HeartBeatVolume#
-
 Global WearingGasMask%, WearingHazmat%, WearingVest%, Wearing714%, WearingNightVision%, WearingPumpkin%
 Global NVTimer#
 
@@ -447,7 +448,7 @@ Global SuperMan%, SuperManTimer#
 
 Global LostHands%
 
-Global Injuries#, Bloodloss#, Infect#, HealTimer#
+Global Infect#
 
 
 ;player coordinates, angle, speed, movement etc ---------------------------------------------------------------------
@@ -482,7 +483,7 @@ Global MainMenuOpen%, MenuOpen%, StopHidingTimer#, InvOpen%
 
 Global SelectedEnding$, EndingScreen%, EndingTimer#
 
-Global MsgTimer#, Msg$, DeathMSG$
+Global MsgTimer#, Msg$
 
 Global AccessCode%, KeypadInput$, KeypadTimer#, KeypadMSG$
 
@@ -912,7 +913,6 @@ Global BurstSFX
 Dim RustleSFX%(3)
 
 Global Use914SFX%
-Global Death914SFX% 
 
 Dim DripSFX%(4)
 
@@ -956,7 +956,6 @@ Dim AlarmSFX%(5)
 
 Dim CommotionState%(25)
 
-Global HeartBeatSFX 
 
 Global VomitSFX%
 
@@ -996,7 +995,6 @@ Global MonitorTimer# = 0.0, MonitorTimer2# = 0.0, UpdateCheckpoint1%, UpdateChec
 	;False: Player is not seen (will be set after every call of the Main Loop
 	;True: The Player got detected by a camera
 Global PlayerDetected%
-Global PrevInjuries#,PrevBloodloss#
 Global NoTarget% = False
 
 Global GuaranteedOmni% = False
@@ -1825,6 +1823,8 @@ While IsRunning
 			ProcessBindings()
 		EndIf
 		
+		If DeathPending Then DeathSequence()
+		
 		If InfiniteStamina% Then Stamina = Min(100, Stamina + (100.0-Stamina)*0.01*FPSfactor)
 		
 		CatchErrors("Uncaught (UpdateWorld)")
@@ -1927,20 +1927,133 @@ End Function
 ;----------------------------------------------------------------------------------------------------------------------------------------------------
 
 
-Function Kill()
+Function DamagePlayer(amount#, cause$)
 	If GodMode Then Return
+	If Health <= 0 Then Return
 	
-	If BreathCHN <> 0 Then
-		If ChannelPlaying(BreathCHN) Then StopChannel(BreathCHN)
+	Health = Max(Health - amount, 0.0)
+	DeathCause = cause
+	If Health <= 0 Then DeathPending = True
+End Function
+
+
+Function DeathSequence()
+	DeathPending = False
+	
+	PauseSounds()
+	If MusicCHN <> 0 Then
+		If NowPlaying < 66
+			SetStreamPaused_Strict(MusicCHN, True)
+		Else
+			PauseChannel(MusicCHN)
+		EndIf
 	EndIf
 	
-	If KillTimer >= 0 Then
-		KillAnim = Rand(0,1)
-		PlaySound_Strict(DamageSFX(0))
-		KillTimer = Min(-1, KillTimer)
-		PositionEntity(Head, EntityX(Camera, True), EntityY(Camera, True), EntityZ(Camera, True), True)
-		ResetEntity (Head)
-		RotateEntity(Head, 0, EntityYaw(Camera), 0)		
+	Local beatText$ = GetINIString("Data\rebirth.ini", "rebirth", "beat_text")
+	Local beatSound$ = GetINIString("Data\rebirth.ini", "rebirth", "beat_sound")
+	Local beatMovie$ = GetINIString("Data\rebirth.ini", "rebirth", "beat_movie")
+	Local beatTime# = Min(Max(GetINIFloat("Data\rebirth.ini", "rebirth", "beat_time", 1.5), 1.0), 2.0)
+	
+	ClsColor 0,0,0
+	Cls
+	Flip False
+	
+	Local movie% = 0
+	If beatMovie <> "" Then movie = OpenMovie(beatMovie)
+	
+	Local beatChn% = 0, beatSnd% = 0
+	If beatSound <> "" Then
+		beatSnd = LoadSound_Strict(beatSound)
+		beatChn = PlaySound_Strict(beatSnd)
+	EndIf
+	
+	If movie <> 0 And MovieWidth(movie) > 0 Then
+		Local movieLength% = MovieLength(movie)
+		If movieLength <= 0 Then movieLength = 30000
+		Local movieStart% = MilliSecs()
+		While MoviePlaying(movie) And (MilliSecs()-movieStart < movieLength+3000)
+			Cls
+			DrawDeathMovie(movie)
+			DrawBeatText(beatText)
+			Flip False
+			Delay 10
+		Wend
+		CloseMovie(movie)
+	Else
+		If movie <> 0 Then CloseMovie(movie)
+		Local blackStart% = MilliSecs()
+		While MilliSecs()-blackStart < Int(beatTime*1000)
+			Cls
+			DrawBeatText(beatText)
+			Flip False
+			Delay 10
+		Wend
+	EndIf
+	
+	If beatChn <> 0 Then StopChannel(beatChn)
+	If beatSnd <> 0 Then FreeSound_Strict(beatSnd)
+	
+	Cls
+	
+	Health = MAX_HEALTH
+	Stamina = 100
+	If MTStartRoom <> Null Then Teleport(MTStartRoom)
+	
+	ResumeSounds()
+	If MusicCHN <> 0 Then
+		If NowPlaying < 66
+			SetStreamPaused_Strict(MusicCHN, False)
+		Else
+			ResumeChannel(MusicCHN)
+		EndIf
+	EndIf
+	PrevTime = MilliSecs()
+End Function
+
+
+Function DrawBeatText(beatText$)
+	If beatText = "" Then Return
+	
+	SetFont Font1
+	Color 0,0,0
+	Text GraphicWidth/2+1, GraphicHeight-Int(40*UIScale)+1, beatText, True, True
+	Color 255,255,255
+	Text GraphicWidth/2, GraphicHeight-Int(40*UIScale), beatText, True, True
+End Function
+
+
+Function DrawDeathMovie(movie%)
+	Local mw% = MovieWidth(movie)
+	Local mh% = MovieHeight(movie)
+	If mw <= 0 Or mh <= 0 Then Return
+	
+	Local fit# = Min(Float(GraphicWidth)/Float(mw), Float(GraphicHeight)/Float(mh))
+	Local w# = Min(Float(mw)*fit*1.25, Float(GraphicWidth))
+	Local h# = Min(Float(mh)*fit*(1.0+Rnd(-0.02,0.02)), Float(GraphicHeight))
+	
+	Local x# = Max(Min((GraphicWidth-w)*0.5+Rnd(-3,3), GraphicWidth-w), 0.0)
+	Local y# = Max(Min((GraphicHeight-h)*0.5+Rnd(-2,2), GraphicHeight-h), 0.0)
+	
+	If Rand(80) = 1 Then Return
+	
+	DrawMovie(movie, Int(x), Int(y), Int(w), Int(h))
+	
+	If Rand(16) = 1 And (GraphicWidth-w) > 12 Then
+		Local gx# = Max(Min(x+Rnd(-6,6), GraphicWidth-w), 0.0)
+		DrawMovie(movie, Int(gx), Int(y), Int(w), Int(h))
+	EndIf
+	
+	Local sy%
+	Color 0,0,0
+	For sy = 0 To GraphicHeight-1 Step 4
+		Rect 0, sy, GraphicWidth, 1, True
+	Next
+	Rect 0, (MilliSecs()/28) Mod GraphicHeight, GraphicWidth, Int(6*UIScale), True
+	
+	If Rand(22) = 1 Then Rect 0, Rand(0, Max(GraphicHeight-1,0)), GraphicWidth, Rand(2,8), True
+	If Rand(58) = 1 Then
+		Color 255,255,255
+		Rect 0, Rand(0, Max(GraphicHeight-1,0)), GraphicWidth, 1, True
 	EndIf
 End Function
 
@@ -2124,22 +2237,9 @@ Function MovePlayer()
 		
 		CameraShake = Sin(SuperManTimer / 5.0) * (SuperManTimer / 1500.0)
 		
-		If SuperManTimer > 70 * 50 Then
-			DeathMSG = I_Loc\DeathMessage_914Superman
-			Kill()
-			ShowEntity Fog
-		Else
-			BlurTimer = 500		
-			HideEntity Fog
-		EndIf
+		BlurTimer = 500		
+		HideEntity Fog
 	End If
-	
-	If DeathTimer > 0 Then
-		DeathTimer=DeathTimer-FPSfactor
-		If DeathTimer < 1 Then DeathTimer = -1.0
-	ElseIf DeathTimer < 0 
-		Kill()
-	EndIf
 	
 	If CurrSpeed > 0 Then
         Stamina = Min(Stamina + 0.15 * FPSfactor/1.25, 100.0)
@@ -2213,7 +2313,7 @@ Function MovePlayer()
 			temp# = (Shake Mod 360)
 			Local tempchn%
 			If (Not UnableToMove%) Then Shake# = (Shake + FPSfactor * Min(Sprint, 1.5) * 7) Mod 720
-			If temp < 180 And (Shake Mod 360) >= 180 And KillTimer>=0 And FallTimer >= 0 Then
+			If temp < 180 And (Shake Mod 360) >= 180 And FallTimer >= 0 Then
 				PlayerStepped = True
 				If CurrStepSFX=0 Then
 					temp = GetStepSound(Collider)
@@ -2276,11 +2376,6 @@ Function MovePlayer()
 		
 		ResetEntity Collider
 	Else
-		temp2# = temp2 / Max((Injuries+3.0)/3.0,1.0)
-		If Injuries > 0.5 Then 
-			temp2 = temp2*Min((Sin(Shake/2)+1.2),1.0)
-		EndIf
-		
 		temp = False
 		If (Not IsZombie%)
 			If MoveInputCancelling Then
@@ -2338,7 +2433,7 @@ Function MovePlayer()
 			CurrSpeed = Max(CurveValue(0.0, CurrSpeed-0.1, 1.0),0.0)
 		EndIf
 		
-		If (Not UnableToMove%) And KillTimer >= 0 And FallTimer >= 0 Then TranslateEntity Collider, Cos(angle)*CurrSpeed * FPSfactor, 0, Sin(angle)*CurrSpeed * FPSfactor, True
+		If (Not UnableToMove%) And FallTimer >= 0 Then TranslateEntity Collider, Cos(angle)*CurrSpeed * FPSfactor, 0, Sin(angle)*CurrSpeed * FPSfactor, True
 		
 		Local CollidedFloor% = False
 		For i = 1 To CountCollisions(Collider)
@@ -2379,75 +2474,11 @@ Function MovePlayer()
 	
 	ForceMove = False
 	
-	If Injuries > 1.0 Then
-		temp2 = Bloodloss
-		BlurTimer = Max(Max(Sin(MilliSecs()/100.0)*Bloodloss*30.0,Bloodloss*2*(2.0-CrouchState)),BlurTimer)
-		If (Not I_427\Using And I_427\Timer < 70*360) Then
-			Bloodloss = Min(Bloodloss + (Min(Injuries,3.5)/300.0)*FPSfactor,100)
-		EndIf
-		
-		If temp2 <= 60 And Bloodloss > 60 Then
-			Msg = I_Loc\Message_BloodlossFaint
-			MsgTimer = 70*4
-		EndIf
-	EndIf
-	
-	
-	If Bloodloss > 0 Then
-		If Injuries > 1.0 And Rnd(200/FPSfactor)<Min(Injuries,4.0) Then
-			Local pvt = CreatePivot()
-			PositionEntity pvt, EntityX(Collider)+Rnd(-0.05,0.05),EntityY(Collider)-0.05,EntityZ(Collider)+Rnd(-0.05,0.05)
-			TurnEntity pvt, 90, 0, 0
-			EntityPick(pvt,0.3)
-			Local de.decals = CreateDecal(Rand(15,16), PickedX(), PickedY()+0.005, PickedZ(), 90, Rand(360), 0)
-			de\size = Rnd(0.03,0.08)*Min(Injuries,3.0) : EntityAlpha(de\obj, 1.0) : ScaleSprite de\obj, de\size, de\size
-			tempchn% = PlaySound_Strict (DripSFX(Rand(0,2)))
-			ChannelVolume tempchn, Rnd(0.0,0.8)*SFXVolume
-			ChannelPitch tempchn, Rand(20000,30000)
-			
-			FreeEntity pvt
-		EndIf
-		
-		CurrCameraZoom = Max(CurrCameraZoom, (Sin(Float(MilliSecs())/20.0)+1.0)*Bloodloss*0.2)
-		
-		If Bloodloss > 60 Then Crouch = True
-		If Bloodloss => 100 Then 
-			Kill()
-			HeartBeatVolume = 0.0
-		ElseIf Bloodloss > 80.0
-			HeartBeatRate = Max(150-(Bloodloss-80)*5,HeartBeatRate)
-			HeartBeatVolume = Max(HeartBeatVolume, 0.75+(Bloodloss-80.0)*0.0125)	
-		ElseIf Bloodloss > 35.0
-			HeartBeatRate = Max(70+Bloodloss,HeartBeatRate)
-			HeartBeatVolume = Max(HeartBeatVolume, (Bloodloss-35.0)/60.0)			
-		EndIf
-	EndIf
-	
-	If HealTimer > 0 Then
-		DebugLog HealTimer
-		HealTimer = HealTimer - (FPSfactor / 70)
-		Bloodloss = Min(Bloodloss + (2 / 400.0) * FPSfactor, 100)
-		Injuries = Max(Injuries - (FPSfactor / 70) / 30, 0.0)
-	EndIf
-		
 	If Playable Then
 		If KeyHit(KEY_BLINK) Then BlinkTimer = 0
 		If KeyDown(KEY_BLINK) And BlinkTimer < - 10 Then BlinkTimer = -10
 	EndIf
 	
-	
-	If HeartBeatVolume > 0 Then
-		If HeartBeatTimer <= 0 Then
-			tempchn = PlaySound_Strict (HeartBeatSFX)
-			ChannelVolume tempchn, HeartBeatVolume*SFXVolume#
-			
-			HeartBeatTimer = 70.0*(60.0/Max(HeartBeatRate,1.0))
-		Else
-			HeartBeatTimer = HeartBeatTimer - FPSfactor
-		EndIf
-		
-		HeartBeatVolume = Max(HeartBeatVolume - FPSfactor*0.05, 0)
-	EndIf
 	
 	CatchErrors("MovePlayer")
 End Function
@@ -2465,7 +2496,7 @@ Function MouseLook(handleInput% = True)
 	ZoomCamera(FOV)
 	CurrCameraZoom = Max(CurrCameraZoom - FPSfactor, 0)
 	
-	If KillTimer >= 0 And FallTimer >=0 Then
+	If FallTimer >= 0 Then
 		
 		HeadDropSpeed = 0
 		
@@ -2477,8 +2508,6 @@ Function MouseLook(handleInput% = True)
 		EndIf
 		;EndIf
 		
-		Local roll# = Max(Min(Sin(Shake/2)*2.5*Min(Injuries+0.25,3.0),8.0),-8.0)*ViewBobScale
-
 		Local bobAmount# = Min(CurrSpeed / 0.018, 2.5)
 		Local bobTarget# = Min(bobAmount, 1.8)
 		BobPowerSmooth = CurveValue(bobTarget, BobPowerSmooth, 10.0)
@@ -2496,7 +2525,7 @@ Function MouseLook(handleInput% = True)
 		Local bobRoll# = Sin(BobPhase) * 1.2 * bobPower * bobScale
 
 		PositionEntity Camera, EntityX(Collider), EntityY(Collider), EntityZ(Collider)
-		RotateEntity Camera, 0, EntityYaw(Collider), (roll + bobRoll)*0.5
+		RotateEntity Camera, 0, EntityYaw(Collider), bobRoll*0.5
 
 		MoveEntity Camera, side, up + 0.6 + CrouchState * -0.3, fwd
 		
@@ -2530,45 +2559,13 @@ Function MouseLook(handleInput% = True)
 		If user_camera_pitch# > 70.0 Then user_camera_pitch# = 70.0
 		If user_camera_pitch# < - 70.0 Then user_camera_pitch# = -70.0
 		
-		RotateEntity Camera, WrapAngle(user_camera_pitch + Rnd(-CameraShake*FPSfactor, CameraShake*FPSfactor) * ViewBobScale), WrapAngle(EntityYaw(Collider) + Rnd(-CameraShake*FPSfactor, CameraShake*FPSfactor) * ViewBobScale), roll + bobRoll ; Pitch the user;s camera up And down.
+		RotateEntity Camera, WrapAngle(user_camera_pitch + Rnd(-CameraShake*FPSfactor, CameraShake*FPSfactor) * ViewBobScale), WrapAngle(EntityYaw(Collider) + Rnd(-CameraShake*FPSfactor, CameraShake*FPSfactor) * ViewBobScale), bobRoll ; Pitch the user;s camera up And down.
 		
 		If PlayerRoom\RoomTemplate\Name = "pocketdimension" Lor PlayerRoom\RoomTemplate\Name = "halloweenpd" Then
 			If EntityY(Collider)<2000*RoomScale Or EntityY(Collider)>2608*RoomScale Then
-				RotateEntity Camera, WrapAngle(EntityPitch(Camera)),WrapAngle(EntityYaw(Camera)), roll+WrapAngle(Sin(MilliSecs()/150.0)*30.0)*ViewBobScale ; Pitch the user;s camera up And down.
+				RotateEntity Camera, WrapAngle(EntityPitch(Camera)),WrapAngle(EntityYaw(Camera)), WrapAngle(Sin(MilliSecs()/150.0)*30.0)*ViewBobScale ; Pitch the user;s camera up And down.
 			EndIf
 		EndIf
-		
-	Else
-		HideEntity Collider
-		PositionEntity Camera, EntityX(Head), EntityY(Head), EntityZ(Head)
-		
-		Local CollidedFloor% = False
-		For i = 1 To CountCollisions(Head)
-			If CollisionY(Head, i) < EntityY(Head) - 0.01 Then CollidedFloor = True
-		Next
-		
-		If CollidedFloor = True Then
-			HeadDropSpeed# = 0
-		Else
-			
-			If KillAnim = 0 Then 
-				MoveEntity Head, 0, 0, HeadDropSpeed
-				RotateEntity(Head, CurveAngle(-90.0, EntityPitch(Head), 20.0), EntityYaw(Head), EntityRoll(Head))
-				RotateEntity(Camera, CurveAngle(EntityPitch(Head) - 40.0, EntityPitch(Camera), 40.0), EntityYaw(Camera), EntityRoll(Camera))
-			Else
-				MoveEntity Head, 0, 0, -HeadDropSpeed
-				RotateEntity(Head, CurveAngle(90.0, EntityPitch(Head), 20.0), EntityYaw(Head), EntityRoll(Head))
-				RotateEntity(Camera, CurveAngle(EntityPitch(Head) + 40.0, EntityPitch(Camera), 40.0), EntityYaw(Camera), EntityRoll(Camera))
-			EndIf
-			
-			HeadDropSpeed# = HeadDropSpeed - 0.002 * FPSfactor
-		EndIf
-		
-		If InvertMouse Then
-			TurnEntity (Camera, -MouseYSpeed() * 0.05 * FPSfactor, -MouseXSpeed() * 0.15 * FPSfactor, 0)
-		Else
-			TurnEntity (Camera, MouseYSpeed() * 0.05 * FPSfactor, -MouseXSpeed() * 0.15 * FPSfactor, 0)
-		End If
 		
 	EndIf
 	
@@ -2630,7 +2627,6 @@ Function TeleportFromHalloweenRoom%()
 End Function
 
 Function ResetDiseases()
-	DeathTimer = 0
 	Infect = 0
 	Stamina = 100
 	For i = 0 To 5
@@ -2734,14 +2730,11 @@ Function DrawGUI()
 	Local px% = GraphicWidth-pw-Int(24*UIScale)
 	Local py% = GraphicHeight-ph-Int(24*UIScale)
 	Local bw% = pw-Int(28*UIScale)
-	Local health# = Max(Min(100.0-Injuries,100.0),0.0)
+	Local hp# = Max(Min(Health,MAX_HEALTH),0.0)
 	Local stamina# = Max(Min(Stamina,100.0),0.0)
 
-	For i% = 1 To ph-2
-		Local shade% = 24-Int(20.0*i%/ph)
-		Color shade,shade,shade
-		Rect px+1,py+i%,pw-2,1,False
-	Next
+	Color 30,30,30
+	Rect px,py,pw,ph,True
 
 	Color 255,255,255
 	Local b% = Int(8*UIScale)
@@ -2757,13 +2750,13 @@ Function DrawGUI()
 	Color 255,255,255
 	SetFont Font7
 	Text px+Int(14*UIScale),py+Int(10*UIScale),"HEALTH",False,False
-	Color 45,45,45
+	Color 80,80,80
 	Rect px+Int(14*UIScale),py+Int(28*UIScale),bw,Int(8*UIScale),True
 	Color 255,255,255
-	Rect px+Int(14*UIScale),py+Int(28*UIScale),bw*health/100.0,Int(8*UIScale),True
+	Rect px+Int(14*UIScale),py+Int(28*UIScale),bw*hp/MAX_HEALTH,Int(8*UIScale),True
 
 	Text px+Int(14*UIScale),py+Int(52*UIScale),"STAMINA",False,False
-	Color 45,45,45
+	Color 80,80,80
 	Rect px+Int(14*UIScale),py+Int(70*UIScale),bw,Int(8*UIScale),True
 	Color 255,255,255
 	Rect px+Int(14*UIScale),py+Int(70*UIScale),bw*stamina/100.0,Int(8*UIScale),True
@@ -3415,7 +3408,6 @@ Function InitNewGame()
 	PlayTime = 0
 	TimerStopped = False
 	HideDistance# = 15.0
-	HeartBeatRate = 70
 
 	CreateMap(50, 19)
 	DrawLoading(70)
@@ -3472,6 +3464,9 @@ Function InitNewGame()
 	HidePointer()
 	BlinkTimer = -10
 	Stamina = 100
+	Health = MAX_HEALTH
+	DeathPending = False
+	DeathCause = ""
 
 	Playable = False
 	For i% = 0 To 70
@@ -3519,9 +3514,6 @@ Function NullGame(playbuttonsfx%=True)
 	
 	UnableToMove% = False
 	
-	
-	DeathMSG$=""
-	
 	SelectedMap = -1
 	
 	UsedConsole = False
@@ -3546,17 +3538,14 @@ Function NullGame(playbuttonsfx%=True)
 	Shake = 0
 	CurrSpeed = 0
 	
-	DeathTimer=0
-	
-	HeartBeatVolume = 0
-	
 	StaminaEffect = 1.0
 	StaminaEffectTimer = 0
 	BlinkEffect = 1.0
 	BlinkEffectTimer = 0
 	
-	Bloodloss = 0
-	Injuries = 0
+	Health = MAX_HEALTH
+	DeathPending = False
+	DeathCause = ""
 	Infect = 0
 	
 	For i = 0 To 5
@@ -3613,7 +3602,6 @@ Function NullGame(playbuttonsfx%=True)
 	
 	ShouldPlay = 0
 	
-	KillTimer = 0
 	FallTimer = 0
 	Stamina = 100
 	BlurTimer = 0

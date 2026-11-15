@@ -119,7 +119,7 @@ Function ExecuteConsoleCommand(cmd$, quiet% = False)
 			CreateConsoleMsg("timescale "+TimeScale)
 
 		Case "kill", "suicide"
-			Kill()
+			DamagePlayer(MAX_HEALTH, "kill")
 
 		Default
 			CreateConsoleMsg("Unknown command: "+name$,255,0,0)
