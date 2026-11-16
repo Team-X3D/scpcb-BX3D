@@ -7,6 +7,11 @@ Global MenuHoverCooldown%
 
 Global MenuVersion$
 
+Global SquadOpen%
+Dim SquadNames$(3)
+Dim SquadNameFont%(4)
+Global SquadImage%
+
 Global MenuStaticIMG%, MenuStaticFrame%, MenuStaticLast%, MenuStaticFrames%
 Global MenuContext%
 Global MenuEntryCount%
@@ -60,6 +65,30 @@ Function MenuInitStatic()
 End Function
 MenuInitStatic()
 
+Function SquadRefresh()
+	For i% = 0 To 3
+		SquadNames$(i) = SquadNetSlotName(i%)
+	Next
+	If SquadNames$(0) = "" Then SquadNames$(0) = "PLAYER"
+End Function
+
+Function SquadInit()
+	SquadRefresh()
+	For i% = 0 To 4
+		SquadNameFont%(i%) = LoadFont_Strict("GFX\font\arial\Arial.ttf", Int((19-i%*2)*UIScale))
+	Next
+	SquadImage = LoadImage_Strict("GFX\fatty2.png")
+	Local innerW# = GraphicHeight*0.27*0.54 - 2.0*UIScale
+	Local imgW# = innerW#*1.8
+	If SquadImage <> 0 Then
+		If ImageWidth(SquadImage) > 0 Then
+			Local s# = imgW# / ImageWidth(SquadImage)
+			ScaleImage SquadImage, s#, s#
+		EndIf
+	EndIf
+End Function
+SquadInit()
+
 Function MenuLoadEntry(i%, s$)
 	Local n% = Len(s$)
 	MenuEntryLen%(i) = n
@@ -76,11 +105,13 @@ End Function
 
 Function MenuSetup(kind%)
 	MenuContext = kind
+	SquadOpen = False
 	SetFont Font1
 	If kind = 1 Then
-		MenuEntryCount = 2
-		MenuLoadEntry(0, "START")
-		MenuLoadEntry(1, "QUIT")
+		MenuEntryCount = 3
+		MenuLoadEntry(0, "SINGLEPLAYER")
+		MenuLoadEntry(1, "MULTIPLAYER")
+		MenuLoadEntry(2, "QUIT")
 		MenuIntroDone = MenuTitleSeen
 		MenuTitleSeen = True
 	Else
@@ -246,6 +277,222 @@ Function MenuDrawStatic()
 	DrawImage MenuStaticIMG, 0, 0, MenuStaticFrame
 End Function
 
+Function SquadTextWidth#(s$, gap#)
+	Local totalW# = 0.0
+	For j% = 1 To Len(s$)
+		totalW# = totalW# + StringWidth(Mid(s$, j%, 1))
+		If j% > 1 Then totalW# = totalW# + gap#
+	Next
+	Return totalW#
+End Function
+
+Function SquadDrawName(x#, y#, maxW#, s$, fit%=False)
+	s$ = Upper(s$)
+	Local gap# = 2.0*UIScale
+	If fit Then
+		For i% = 0 To 4
+			SetFont SquadNameFont%(i%)
+			If SquadTextWidth(s$, gap#) <= maxW# Then Exit
+		Next
+	EndIf
+	Local n% = Len(s$)
+	Local totalW# = SquadTextWidth(s$, gap#)
+	While n% > 0 And totalW# > maxW#
+		n% = n% - 1
+		totalW# = SquadTextWidth(Left(s$, n%), gap#)
+	Wend
+	Local tx# = x# - totalW#/2.0
+	For j% = 1 To n%
+		Local c$ = Mid(s$, j%, 1)
+		Text tx#, y#, c$, False, True
+		tx# = tx# + StringWidth(c$) + gap#
+	Next
+	SetFont Font1
+End Function
+
+Function SquadCampaignTab(x#, y#, w#, h#, label$, selected%)
+	SetFont Font1
+	If selected Then
+		Color 80, 80, 80
+		Rect x#, y#, w#, h#, True
+		Color 0, 0, 0
+	Else
+		Color 80, 80, 80
+		Rect x#, y#, w#, h#, False
+		Color 255, 255, 255
+	EndIf
+	SquadDrawName(x#+w#/2.0, y#+h#/2.0, w#-8.0*UIScale, label$)
+	If selected Then MenuDrawBrackets(x#, y#, w#, h#)
+End Function
+
+Function SquadMenuButton%(x#, y#, w#, h#, label$)
+	Local over% = MouseOn(Int(x#), Int(y#), Int(w#), Int(h#))
+	If over% Then
+		Color 80, 80, 80
+		Rect x#, y#, w#, h#, True
+		Color 0, 0, 0
+	Else
+		Color 80, 80, 80
+		Rect x#, y#, w#, h#, False
+		Color 255, 255, 255
+	EndIf
+	SquadDrawName(x#+w#/2.0, y#+h#/2.0, w#-36.0*UIScale, label$)
+	If over% Then MenuDrawBrackets(x#, y#, w#, h#)
+	Return over% And MouseHit1
+End Function
+
+Function MenuDrawMultiplayer()
+	ShowPointer()
+	Color 0, 0, 0
+	Rect 0,0,GraphicWidth,GraphicHeight,True
+	MenuDrawStatic()
+
+	SetFont Font2
+	Color 255, 255, 255
+	Local hx# = 48.0*UIScale
+	Local hy# = GraphicHeight*0.08
+	Local hw# = MenuSpacedText(hx#, hy#, "MULTIPLAYER", 10.0)
+	Rect hx#, hy#+StringHeight("A")/2.0+8.0*UIScale, hw#, 1, False
+
+	Local formW# = 420.0*UIScale
+	Local formX# = (GraphicWidth-formW#)/2.0
+	Local labelW# = 110.0*UIScale
+	Local rowH# = 30.0*UIScale
+	Local ny# = GraphicHeight*0.22
+
+	SetFont Font7
+	Color 200, 200, 200
+	Text formX#, ny#+rowH#/2.0, "NAME", False, True
+	SquadNetName$ = InputBox(Int(formX#+labelW#), Int(ny#), Int(formW#-labelW#), Int(rowH#), SquadNetName$, 5, 0, True)
+
+	Local ay# = ny#+rowH#+12.0*UIScale
+	Color 200, 200, 200
+	Text formX#, ay#+rowH#/2.0, "ADDRESS", False, True
+	SquadNetHost$ = InputBox(Int(formX#+labelW#), Int(ay#), Int(formW#-labelW#), Int(rowH#), SquadNetHost$, 3, 0, True)
+
+	Local py# = ay#+rowH#+12.0*UIScale
+	Color 200, 200, 200
+	Text formX#, py#+rowH#/2.0, "PORT", False, True
+	SquadNetPort$ = InputBox(Int(formX#+labelW#), Int(py#), Int(120.0*UIScale), Int(rowH#), SquadNetPort$, 4, 0, True)
+
+	Local by# = py#+rowH#+24.0*UIScale
+	SetFont Font1
+	If SquadMenuButton(formX#, by#, formW#, 42.0*UIScale, "HOST LOBBY") Then
+		MenuClick()
+		SquadNetHostLobby(Int(Trim(SquadNetPort$)))
+	EndIf
+	Local jy# = by#+52.0*UIScale
+	If SquadMenuButton(formX#, jy#, formW#, 42.0*UIScale, "JOIN LOBBY") Then
+		MenuClick()
+		SquadNetConnect(Trim(SquadNetHost$), Int(Trim(SquadNetPort$)))
+	EndIf
+	Local backY# = jy#+52.0*UIScale
+	If SquadMenuButton(formX#, backY#, formW#, 42.0*UIScale, "BACK") Then
+		MenuClick()
+		SquadNetDisconnect()
+		SquadOpen = False
+	EndIf
+
+	SetFont Font7
+	Color 200, 200, 200
+	Text GraphicWidth/2.0, backY#+54.0*UIScale, SquadNetStatus$, True, True
+	SetFont Font1
+End Function
+
+Function MenuDrawSquad()
+	ShowPointer()
+	Color 0, 0, 0
+	Rect 0,0,GraphicWidth,GraphicHeight,True
+	MenuDrawStatic()
+
+	SetFont Font2
+	Color 255, 255, 255
+	Local hx# = 48.0*UIScale
+	Local hy# = GraphicHeight*0.08
+	Local hw# = MenuSpacedText(hx#, hy#, "SQUAD", 10.0)
+	Rect hx#, hy#+StringHeight("A")/2.0+8.0*UIScale, hw#, 1, False
+
+	SetFont Font1
+	Local tabH# = 32.0*UIScale
+	Local tabY# = GraphicHeight*0.18
+	Local tabGap# = 12.0*UIScale
+	Local t1$ = "CAMPAIGN 01"
+	Local t2$ = "CAMPAIGN 02"
+	Local t3$ = "CAMPAIGN 03"
+	Local w1# = StringWidth(t1$) + 24.0*UIScale
+	Local w2# = StringWidth(t2$) + 24.0*UIScale
+	Local w3# = StringWidth(t3$) + 24.0*UIScale
+	Local tx# = (GraphicWidth-(w1#+w2#+w3#+2.0*tabGap#))/2.0
+	SquadCampaignTab(tx#, tabY#, w1#, tabH#, t1$, True)
+	tx# = tx# + w1# + tabGap#
+	SquadCampaignTab(tx#, tabY#, w2#, tabH#, t2$, False)
+	tx# = tx# + w2# + tabGap#
+	SquadCampaignTab(tx#, tabY#, w3#, tabH#, t3$, False)
+
+	Local bh# = GraphicHeight*0.27
+	Local bw# = bh#*0.54
+	Local gap# = 24.0*UIScale
+	Local bx# = (GraphicWidth-(4*bw#+3*gap#))/2.0
+	Local by# = (GraphicHeight-bh#)/2.0
+	SetFont Font1
+	Local nh# = StringHeight("A") + 12.0*UIScale
+	Local occupied%
+
+	For i% = 0 To 3
+		Local x# = bx# + i%*(bw#+gap#)
+		Color 80, 80, 80
+		Rect x#, by#, bw#, bh#, False
+
+		If SquadNames$(i%) = "" Then
+			Color 80, 80, 80
+			SquadDrawName(x#+bw#/2.0, by#+bh#-nh#/2.0, bw#-8.0*UIScale, "OPEN", True)
+		Else
+			occupied = occupied + 1
+			If SquadImage <> 0 Then
+				Viewport Int(x#+1.0*UIScale), Int(by#+1.0*UIScale), Int(bw#-2.0*UIScale), Int(bh#-nh#-1.0*UIScale)
+				DrawImage SquadImage, x#+(bw#-ImageWidth(SquadImage))/2.0+bw#*0.15, by#+bh#-nh#-ImageHeight(SquadImage)-2.0*UIScale
+				Viewport 0, 0, GraphicWidth, GraphicHeight
+			EndIf
+			If i% = 0 Then
+				Color 80, 80, 80
+				Rect x#+1.0*UIScale, by#+bh#-nh#, bw#-2.0*UIScale, nh#-1.0*UIScale, True
+				Color 0, 0, 0
+			Else
+				Color 255, 255, 255
+			EndIf
+			SquadDrawName(x#+bw#/2.0, by#+bh#-nh#/2.0, bw#-8.0*UIScale, SquadNames$(i%), True)
+			If i% = 0 Then MenuDrawBrackets(x#, by#, bw#, bh#)
+		EndIf
+	Next
+
+	SetFont Font7
+	Color 255, 255, 255
+	Text bx#+bw#/2.0, by#-14.0*UIScale, "YOU", True, True
+	Color 200, 200, 200
+	Text GraphicWidth/2.0, by#+bh#+24.0*UIScale, Str(occupied)+" / 4", True, True
+
+	Local sw# = 420.0*UIScale
+	Local sh# = 42.0*UIScale
+	Local sx# = (GraphicWidth-sw#)/2.0
+	Local sy# = GraphicHeight*0.76
+	Color 80, 80, 80
+	Rect sx#, sy#, sw#, sh#, True
+	Color 0, 0, 0
+	SetFont Font1
+	SquadDrawName(GraphicWidth/2.0, sy#+sh#/2.0, sw#-36.0*UIScale, "START CAMPAIGN")
+	MenuDrawBrackets(sx#, sy#, sw#, sh#)
+
+	SetFont Font1
+	Local lw# = 200.0*UIScale
+	Local lh# = 30.0*UIScale
+	If SquadMenuButton((GraphicWidth-lw#)/2.0, GraphicHeight*0.86, lw#, lh#, "LEAVE LOBBY") Then
+		MenuClick()
+		SquadNetDisconnect()
+	EndIf
+
+	SetFont Font1
+End Function
+
 Function MenuDraw()
 	Local t# = 1.0
 	If Not MenuIntroDone Then t# = Min(Float(MilliSecs()-MenuIntroStart)/Float(1200), 1.0)
@@ -281,6 +528,26 @@ End Function
 Function UpdateMainMenu()
 	If MenuContext <> 1 Then MenuSetup(1)
 
+	If SquadOpen Then
+		SquadNetUpdate()
+		If SquadNetInLobby() Then
+			SquadRefresh()
+			MenuDrawSquad()
+		Else
+			MenuDrawMultiplayer()
+		EndIf
+		If KeyHit(1) Then
+			If SquadNetInLobby() Then
+				SquadNetDisconnect()
+			Else
+				SquadNetDisconnect()
+				SquadOpen = False
+			EndIf
+			MenuClick()
+		EndIf
+		Return
+	EndIf
+
 	Local act% = MenuInput()
 	MenuDraw()
 
@@ -305,6 +572,9 @@ Function UpdateMainMenu()
 		FlushKeys()
 		FlushMouse()
 	ElseIf act% = 1 Then
+		SquadNetDisconnect()
+		SquadOpen = True
+	ElseIf act% = 2 Then
 		End
 	EndIf
 End Function
@@ -343,7 +613,7 @@ Function DrawFrame(x%, y%, width%, height%, xoffset%=0, yoffset%=0, scrollY%=Tru
 	Rect x+width-1,y,1,height,False
 End Function
 
-Function InputBox$(x%, y%, width%, height%, Txt$, ID% = 0, virtualKeyboardMode=0)
+Function InputBox$(x%, y%, width%, height%, Txt$, ID% = 0, virtualKeyboardMode=0, alignLeft%=False)
 	Color 255,255,255
 	Rect(x,y,width,height,True)
 
@@ -360,12 +630,18 @@ Function InputBox$(x%, y%, width%, height%, Txt$, ID% = 0, virtualKeyboardMode=0
 	Color 10,10,10
 	Rect(x + 2, y + 2, width - 4, height - 4)
 	Color 255,255,255
-	Text(x + width / 2, y + height / 2, Txt, True, True)
+	If alignLeft Then
+		Text(x + 8 * UIScale, y + height / 2, Txt, False, True)
+	Else
+		Text(x + width / 2, y + height / 2, Txt, True, True)
+	EndIf
 
 	If (Not MouseOnBox) And MouseHit1 And SelectedInputBox = ID Then SelectedInputBox = 0
 
 	If SelectedInputBox = ID Then
-		If (MilliSecs() Mod 800) < 400 Then Rect(x + width / 2 + StringWidth(Txt) / 2 + 2, y + height / 2 - 17 * UIScale / 2, 2, 17 * UIScale)
+		Local cursorX# = x + width / 2 + StringWidth(Txt) / 2
+		If alignLeft Then cursorX = x + 8 * UIScale + StringWidth(Txt)
+		If (MilliSecs() Mod 800) < 400 Then Rect(cursorX + 2, y + height / 2 - 17 * UIScale / 2, 2, 17 * UIScale)
 		Txt = TextInput(Txt)
 	EndIf
 

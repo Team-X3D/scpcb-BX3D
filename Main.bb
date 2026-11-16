@@ -1624,6 +1624,7 @@ Global MTF_CameraCheckDetected% = False
 
 ;---------------------------------------------------------------------------------------------------
 
+Include "SquadNet.bb"
 Include "menu.bb"
 MainMenuOpen = True
 
