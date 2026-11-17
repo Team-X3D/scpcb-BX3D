@@ -364,8 +364,6 @@ Global CanSave% = True
 
 AppTitle "ACE"
 
-PlayStartupVideos()
-
 ;---------------------------------------------------------------------------------------------------------------------
 
 ;[Block]
@@ -384,6 +382,9 @@ Font7% = LoadFont_Strict("GFX\font\arial\Arialbd.ttf", Int(13 * UIScale))
 Global CreditsFont%,CreditsFont2%
 
 ConsoleFont% = Font1
+
+Dim StartupCat%(11)
+PlayStartupVideos()
 
 Include "Subtitles.bb"
 LoadSubtitles()
@@ -5245,18 +5246,62 @@ Function PlayStartupVideos()
 		Return
 	EndIf
 
+	For i% = 0 To 11
+		StartupCat%(i) = LoadImage("GFX\cats\cat"+Str(i%+1)+".jpg")
+	Next
+
 	Local chn% = PlaySound(snd)
+	Local t0% = MilliSecs()
+	Local W% = GraphicWidth, H% = GraphicHeight, cx% = W/2
+	Local iw% = ImageWidth(img), ih% = ImageHeight(img)
+	Local faceSize# = H*0.26, faceCY# = H*0.40
+	Local t#, cw%, ch%, bw#, bh#, sp#, xk#, yk#
 
-	Cls
-	DrawImage img, (GraphicWidth - ImageWidth(img)) / 2, (GraphicHeight - ImageHeight(img)) / 2
-	Flip
+	FlushKeys()
+	FlushMouse()
 
-	While ChannelPlaying(chn)
-		Delay 50
+	While True
+		t = MilliSecs()-t0
+
+		If t > 900 Then
+			If GetKey() <> 0 Lor MouseHit(1) Then Exit
+		EndIf
+
+		Color 0, 0, 0
+		Rect 0, 0, W, H, True
+
+		For i% = 0 To 11
+			If StartupCat%(i) <> 0 Then
+				cw% = ImageWidth(StartupCat%(i))
+				ch% = ImageHeight(StartupCat%(i))
+				sp# = H*0.13 + (i% Mod 4)*H*0.045
+				bw# = sp#
+				bh# = sp#*ch%/cw%
+				xk# = (t*(0.00035+(i% Mod 3)*0.00009) + i%*0.29) Mod 2.0
+				If xk# > 1.0 Then xk# = 2.0-xk#
+				yk# = (t*(0.00052+(i% Mod 2)*0.00013) + i%*0.17) Mod 2.0
+				If yk# > 1.0 Then yk# = 2.0-yk#
+				DrawImageRectStretch StartupCat%(i), Int(xk#*(W-bw#)), Int(yk#*(H-bh#)), Int(bw#), Int(bh#), 0, 0, cw%, ch%
+			EndIf
+		Next
+
+		DrawImageRectStretch img, Int(cx-faceSize*0.5), Int(faceCY-faceSize*0.5), Int(faceSize), Int(faceSize), 0, 0, iw, ih
+
+		Flip
+
+		If t > 3000 Then
+			If (Not ChannelPlaying(chn)) Then Exit
+			If t > 6000 Then Exit
+		EndIf
+		Delay 8
 	Wend
 
+	For i% = 0 To 11
+		If StartupCat%(i) <> 0 Then FreeImage StartupCat%(i)
+	Next
 	FreeSound snd
 	FreeImage img
+	Color 255, 255, 255
 	Cls
 	Flip
 End Function

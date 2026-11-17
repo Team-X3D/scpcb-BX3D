@@ -1,0 +1,71 @@
+cat1.jpg
+  source : https://commons.wikimedia.org/wiki/File:Pallas_Cat_Kitten.jpg
+  title  : File:Pallas Cat Kitten.jpg
+  license: Public domain
+  author : Ltshears
+
+cat2.jpg
+  source : https://commons.wikimedia.org/wiki/File:Pallas_Cat_001.jpg
+  title  : File:Pallas Cat 001.jpg
+  license: Public domain
+  author : Ltshears
+
+cat3.jpg
+  source : https://commons.wikimedia.org/wiki/File:WhfPallasCat.JPG
+  title  : File:WhfPallasCat.JPG
+  license: Public domain
+  author : Editfmah Adrian Herridge
+
+cat4.jpg
+  source : https://commons.wikimedia.org/wiki/File:Manul_(f._manul).JPG
+  title  : File:Manul (f. manul).JPG
+  license: Public domain
+  author : Unknown authorUnknown author
+
+cat5.jpg
+  source : https://commons.wikimedia.org/wiki/File:Felis_manul_Korkeasaari_zoo.JPG
+  title  : File:Felis manul Korkeasaari zoo.JPG
+  license: Public domain
+  author : MKFI
+
+cat6.jpg
+  source : https://commons.wikimedia.org/wiki/File:20220523-FPAC-PJK-0283_TONED.jpg
+  title  : File:20220523-FPAC-PJK-0283 TONED.jpg
+  license: Public domain
+  author : USDAgov
+
+cat7.jpg
+  source : https://commons.wikimedia.org/wiki/File:Kot_ruda.jpg
+  title  : File:Kot ruda.jpg
+  license: CC0
+  author : Kamil754
+
+cat8.jpg
+  source : https://commons.wikimedia.org/wiki/File:Kevin_and_Bunny.jpg
+  title  : File:Kevin and Bunny.jpg
+  license: CC0
+  author : Absoluteterritori
+
+cat9.jpg
+  source : https://commons.wikimedia.org/wiki/File:Kevin_and_Sunny.jpg
+  title  : File:Kevin and Sunny.jpg
+  license: CC0
+  author : Absoluteterritori
+
+cat10.jpg
+  source : https://commons.wikimedia.org/wiki/File:Lucky_sunbathing.jpg
+  title  : File:Lucky sunbathing.jpg
+  license: CC0
+  author : Absoluteterritori
+
+cat11.jpg
+  source : https://commons.wikimedia.org/wiki/File:Black_cat_curled_up_on_a_sofa_in_Newcastle_upon_Tyne,_UK.jpg
+  title  : File:Black cat curled up on a sofa in Newcastle upon Tyne, UK.jpg
+  license: CC0
+  author : Salwa Farwaneh Dameh
+
+cat12.jpg
+  source : https://commons.wikimedia.org/wiki/File:Domestic_tabby_shorthair_kitten.jpg
+  title  : File:Domestic tabby shorthair kitten.jpg
+  license: CC0
+  author : NortheasternEditor
