@@ -854,7 +854,7 @@ Music(7) = "Room3Storage"
 Music(8) = "Room049"
 Music(9) = "8601"
 Music(10) = "106"
-Music(11) = "Menu"
+Music(11) = "Menu" ;TEMPORARY: borrowed from the MTF mod!!
 Music(12) = "8601Cancer"
 Music(13) = "Intro"
 Music(15) = "PDTrench"
@@ -874,9 +874,9 @@ Global MusicVolume# = GetOptionFloat("audio", "music volume")
 ;Global MusicCHN% = StreamSound_Strict("SFX\Music\"+Music(2)+".ogg", MusicVolume, CurrMusicStream)
 
 Global CurrMusicStream, MusicCHN
-MusicCHN = StreamSound_Strict("SFX\Music\"+Music(2)+".ogg",MusicVolume)
+MusicCHN = StreamSound_Strict("SFX\Music\"+Music(11)+".ogg",MusicVolume)
 
-Global CurrMusicVolume# = 1.0, NowPlaying%=2, ShouldPlay%=11
+Global CurrMusicVolume# = 1.0, NowPlaying%=11, ShouldPlay%=11
 Global CurrMusic% = 1
 
 Dim OpenDoorSFX%(3,3), CloseDoorSFX%(3,3)

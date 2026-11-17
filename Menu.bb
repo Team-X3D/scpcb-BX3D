@@ -382,11 +382,11 @@ Function MenuDrawMultiplayer()
 		SquadNetHostLobby(Int(Trim(SquadNetPort$)))
 	EndIf
 	Local jy# = by#+52.0*UIScale
+	Local backY# = jy#+52.0*UIScale
 	If SquadMenuButton(formX#, jy#, formW#, 42.0*UIScale, "JOIN LOBBY") Then
 		MenuClick()
 		SquadNetConnect(Trim(SquadNetHost$), Int(Trim(SquadNetPort$)))
 	EndIf
-	Local backY# = jy#+52.0*UIScale
 	If SquadMenuButton(formX#, backY#, formW#, 42.0*UIScale, "BACK") Then
 		MenuClick()
 		SquadNetDisconnect()
@@ -453,7 +453,7 @@ Function MenuDrawSquad()
 				DrawImage SquadImage, x#+(bw#-ImageWidth(SquadImage))/2.0+bw#*0.15, by#+bh#-nh#-ImageHeight(SquadImage)-2.0*UIScale
 				Viewport 0, 0, GraphicWidth, GraphicHeight
 			EndIf
-			If i% = 0 Then
+			If i% = SquadNetLocalSlot Then
 				Color 80, 80, 80
 				Rect x#+1.0*UIScale, by#+bh#-nh#, bw#-2.0*UIScale, nh#-1.0*UIScale, True
 				Color 0, 0, 0
@@ -461,26 +461,32 @@ Function MenuDrawSquad()
 				Color 255, 255, 255
 			EndIf
 			SquadDrawName(x#+bw#/2.0, by#+bh#-nh#/2.0, bw#-8.0*UIScale, SquadNames$(i%), True)
-			If i% = 0 Then MenuDrawBrackets(x#, by#, bw#, bh#)
+			If i% = SquadNetLocalSlot Then MenuDrawBrackets(x#, by#, bw#, bh#)
 		EndIf
 	Next
 
 	SetFont Font7
 	Color 255, 255, 255
-	Text bx#+bw#/2.0, by#-14.0*UIScale, "YOU", True, True
+	If SquadNetLocalSlot >= 0 Then Text bx#+SquadNetLocalSlot*(bw#+gap#)+bw#/2.0, by#-14.0*UIScale, "YOU", True, True
 	Color 200, 200, 200
-	Text GraphicWidth/2.0, by#+bh#+24.0*UIScale, Str(occupied)+" / 4", True, True
+	Text GraphicWidth/2.0, by#+bh#+24.0*UIScale, Str(occupied)+" / "+Str(NET_MAX_PLAYERS), True, True
 
 	Local sw# = 420.0*UIScale
 	Local sh# = 42.0*UIScale
 	Local sx# = (GraphicWidth-sw#)/2.0
 	Local sy# = GraphicHeight*0.76
-	Color 80, 80, 80
-	Rect sx#, sy#, sw#, sh#, True
-	Color 0, 0, 0
-	SetFont Font1
-	SquadDrawName(GraphicWidth/2.0, sy#+sh#/2.0, sw#-36.0*UIScale, "START CAMPAIGN")
-	MenuDrawBrackets(sx#, sy#, sw#, sh#)
+	If SquadNetIsHost Then
+		If SquadMenuButton(sx#, sy#, sw#, sh#, "START") Then
+			MenuClick()
+			SquadNetStartFloor()
+		EndIf
+	Else
+		Color 80, 80, 80
+		Rect sx#, sy#, sw#, sh#, True
+		SetFont Font1
+		Color 120, 120, 120
+		SquadDrawName(GraphicWidth/2.0, sy#+sh#/2.0, sw#-36.0*UIScale, "WAITING FOR HOST")
+	EndIf
 
 	SetFont Font1
 	Local lw# = 200.0*UIScale
@@ -490,6 +496,9 @@ Function MenuDrawSquad()
 		SquadNetDisconnect()
 	EndIf
 
+	SetFont Font7
+	Color 200, 200, 200
+	Text GraphicWidth/2.0, GraphicHeight*0.86+lh#+16.0*UIScale, SquadNetStatus$, True, True
 	SetFont Font1
 End Function
 
@@ -521,20 +530,35 @@ Function MenuDraw()
 
 	MenuDrawEntries(t#)
 
+	If SquadNetNotice$ <> "" Then
+		If MilliSecs() < SquadNetNoticeUntil Then
+			SetFont Font7
+			Color 200, 200, 200
+			Text GraphicWidth/2.0, GraphicHeight-44.0*UIScale, SquadNetNotice$, True, True
+			SetFont Font1
+		Else
+			SquadNetNotice$ = ""
+		EndIf
+	EndIf
+
 	Color 255, 255, 255
 	Text 24.0*UIScale, GraphicHeight-26.0*UIScale, MenuVersion$, False, False
 End Function
 
 Function UpdateMainMenu()
 	If MenuContext <> 1 Then MenuSetup(1)
+	SquadNetUpdate()
 
 	If SquadOpen Then
-		SquadNetUpdate()
 		If SquadNetInLobby() Then
 			SquadRefresh()
 			MenuDrawSquad()
 		Else
 			MenuDrawMultiplayer()
+		EndIf
+		If SquadNetPendingStart Then
+			SquadNetBeginGame()
+			Return
 		EndIf
 		If KeyHit(1) Then
 			If SquadNetInLobby() Then
@@ -923,6 +947,7 @@ Function InventoryInput()
 End Function
 
 Function DrawInventory()
+	SquadNetUpdate()
 	If Not InvOpen Then Return
 
 	Local item.Items = Null
