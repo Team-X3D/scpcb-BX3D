@@ -121,6 +121,14 @@ Function ExecuteConsoleCommand(cmd$, quiet% = False)
 		Case "kill", "suicide"
 			DamagePlayer(MAX_HEALTH, "kill")
 
+		Case "hurt"
+			Local dmg# = Float(Piece$(args$,1," "))
+			Local limb% = 1
+			If Trim(Piece$(args$,2," ")) <> "" Then limb = Int(Piece$(args$,2," "))
+			If dmg <= 0.0 Then dmg = 10.0
+			DamagePlayer(dmg, "console", limb)
+			CreateConsoleMsg("limb "+limb+" health "+Health)
+
 		Default
 			CreateConsoleMsg("Unknown command: "+name$,255,0,0)
 	End Select

@@ -19,6 +19,10 @@ Global SquadNetRosterSynced%
 
 Dim SquadNetSlots$(NET_MAX_PLAYERS-1)
 Dim SquadNetSlotPeer%(NET_MAX_PLAYERS-1)
+Dim NetPX#(NET_MAX_PLAYERS-1), NetPY#(NET_MAX_PLAYERS-1), NetPZ#(NET_MAX_PLAYERS-1), NetPYaw#(NET_MAX_PLAYERS-1)
+Dim RemoteBody%(NET_MAX_PLAYERS-1)
+Dim NetPSeen%(NET_MAX_PLAYERS-1)
+Global NetPosNext%
 
 ;-------------------------------------------------- helpers ------------------------------------------------
 
@@ -218,6 +222,21 @@ End Function
 
 Function SquadNetHandleMsg(msg$)
 	Local tag$ = SquadNetField$(msg$, 1)
+	Local sl%
+	If tag$ = "pos" Then
+		sl = Int(SquadNetField$(msg$, 2))
+		If sl >= 0 And sl <= NET_MAX_PLAYERS-1 Then
+			If sl <> SquadNetLocalSlot Then
+				NetPX#(sl) = Float(SquadNetField$(msg$, 3))
+				NetPY#(sl) = Float(SquadNetField$(msg$, 4))
+				NetPZ#(sl) = Float(SquadNetField$(msg$, 5))
+				NetPYaw#(sl) = Float(SquadNetField$(msg$, 6))
+				NetPSeen%(sl) = True
+			EndIf
+		EndIf
+		Return
+	EndIf
+	If ItemNetHandle%(msg$, tag$) Then Return
 	If SquadNetIsHost Then
 		If tag$ = "hello" Then SquadNetHostHello(NetMsgSender(SquadNetSession), SquadNetField$(msg$, 2))
 		Return
@@ -285,6 +304,43 @@ Function SquadNetUpdate()
 	If SquadNetIsHost Then SquadNetHostSweep()
 End Function
 
+Function SquadNetSendPos()
+	If SquadNetSession = 0 Then Return
+	If NetConnected(SquadNetSession) = 0 Then Return
+	If SquadNetLocalSlot < 0 Then Return
+	NetBroadcast(SquadNetSession, "pos|"+Str(SquadNetLocalSlot)+"|"+Str(EntityX(Collider))+"|"+Str(EntityY(Collider))+"|"+Str(EntityZ(Collider))+"|"+Str(EntityYaw(Collider)), False)
+End Function
+
+Function SquadNetWorldTick()
+	If SquadNetSession = 0 Then Return
+	If SquadNetLocalSlot < 0 Then Return
+
+	If MilliSecs() >= NetPosNext Then
+		SquadNetSendPos()
+		NetPosNext = MilliSecs()+1000/NET_TICK_HZ
+	EndIf
+
+	For i% = 0 To NET_MAX_PLAYERS-1
+		If (i% <> SquadNetLocalSlot) And SquadNetSlots$(i%) <> "" And NetPSeen%(i%) <> 0 Then
+			If RemoteBody%(i%) = 0 Then
+				RemoteBody%(i%) = CreateCube()
+				ScaleEntity RemoteBody%(i%), 0.15, 0.45, 0.15
+				EntityColor RemoteBody%(i%), 190, 70, 70
+				EntityFX RemoteBody%(i%), 1
+				PositionEntity RemoteBody%(i%), NetPX#(i%), NetPY#(i%)+0.15, NetPZ#(i%)
+				RotateEntity RemoteBody%(i%), 0, NetPYaw#(i%), 0
+			Else
+				ShowEntity RemoteBody%(i%)
+				PositionEntity RemoteBody%(i%), CurveValue(NetPX#(i%), EntityX(RemoteBody%(i%)), 4.0), CurveValue(NetPY#(i%)+0.15, EntityY(RemoteBody%(i%)), 4.0), CurveValue(NetPZ#(i%), EntityZ(RemoteBody%(i%)), 4.0)
+				RotateEntity RemoteBody%(i%), 0, CurveAngle(NetPYaw#(i%), EntityYaw(RemoteBody%(i%)), 6.0), 0
+			EndIf
+		Else
+			If RemoteBody%(i%) <> 0 Then HideEntity RemoteBody%(i%)
+			If SquadNetSlots$(i%) = "" Then NetPSeen%(i%) = False
+		EndIf
+	Next
+End Function
+
 ;-------------------------------------------------- start --------------------------------------------------
 
 Function SquadNetStartFloor()
@@ -300,6 +356,13 @@ End Function
 
 Function SquadNetBeginGame()
 	SquadNetPendingStart = False
+	For i% = 0 To NET_MAX_PLAYERS-1
+		NetPSeen%(i%) = False
+		NetPX#(i%) = 0.0
+		NetPY#(i%) = 0.0
+		NetPZ#(i%) = 0.0
+		NetPYaw#(i%) = 0.0
+	Next
 	HasNumericSeed = True
 	RandomSeedNumeric = SquadNetStartSeed
 	RandomSeed$ = Str(SquadNetStartSeed)

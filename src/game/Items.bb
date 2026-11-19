@@ -124,6 +124,7 @@ Type Items
 	Field Picked%
 
 	Field xspeed#,zspeed#
+	Field netid%, taken%
 
 End Type
 
@@ -138,6 +139,8 @@ Function CreateItem.Items(name$, x#, y#, z#)
 	For it.ItemTemplates = Each ItemTemplates
 		If Lower(it\name) = name Then
 			i\itemtemplate = it
+			i\netid = ItemNetNext
+			ItemNetNext = ItemNetNext + 1
 			i\collider = CreatePivot()
 			EntityRadius i\collider, 0.01
 			EntityPickMode i\collider, 1, False
@@ -205,7 +208,7 @@ Function UpdateItems()
 
 	ClosestItem = Null
 	For i.Items = Each Items
-		If (Not i\Picked) Then
+		If (Not i\Picked) And (Not i\taken) Then
 			If i\disttimer < MilliSecs() Then
 				i\dist = EntityDistance(Camera, i\collider)
 				i\disttimer = MilliSecs() + 700
@@ -309,6 +312,7 @@ Function PickItem(item.Items)
 	ItemAmount = ItemAmount + 1
 	If ItemAmount = 1 Then InvSelected = 0
 	HideEntity(item\collider)
+	ItemNetSendTake(item\netid)
 End Function
 
 Function DropItem(item.Items)
@@ -328,6 +332,7 @@ Function DropItem(item.Items)
 	TranslateEntity(item\collider, 0, -0.1, 0.1)
 	RotateEntity(item\collider, 0, EntityYaw(Camera)+Rnd(-110,110), 0, True)
 	ResetEntity(item\collider)
+	ItemNetSendDrop(item\netid, EntityX(item\collider, True), EntityY(item\collider, True), EntityZ(item\collider, True))
 
 	InventoryRemoveItem(item)
 End Function

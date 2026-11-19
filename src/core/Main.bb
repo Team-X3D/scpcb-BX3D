@@ -22,7 +22,7 @@ Function RuntimeErrorExt%(Message$)
 	RuntimeError(Message)
 End Function
 
-Include "StrictLoads.bb"
+Include "src/core/StrictLoads.bb"
 
 Global DataDir$ = InitDataDir()
 Global OptionFile$ = InitOptionsFile()
@@ -94,9 +94,9 @@ Function GetCLIString$(name$, def$="")
 	Return Trim(Mid(cmd, begin, end - begin))
 End Function
 
-Include "Blitz_File_FileName.bb"
+Include "src/core/Blitz_File_FileName.bb"
 
-Include "DevilParticleSystem.bb"
+Include "src/game/DevilParticleSystem.bb"
 
 Global SteamLastStatus%
 Global SteamActive% = False
@@ -114,7 +114,7 @@ Global IsRestart% = False
 Global IsRunning% = True
 Global ShouldRestart% = False
 
-Include "ModManager.bb"
+Include "src/core/ModManager.bb"
 Global HasDubbedAudio%
 Global ModsEnabled% = GetOptionInt("general", "enable mods") And (Not HasCLIFlag("nomods"))
 If ModsEnabled Then ReloadMods()
@@ -195,7 +195,7 @@ Global ConsoleOpening% = GetOptionInt("console", "auto opening")
 Global SFXVolume# = GetOptionFloat("audio", "sound volume")
 
 Const StringsFile$ = "Data\strings.ini"
-Include "Localization.bb"
+Include "src/core/Localization.bb"
 
 Global I_Loc.LocalizationTable
 If I_Loc <> Null Then Delete I_Loc ; Happens on reload
@@ -386,7 +386,7 @@ ConsoleFont% = Font1
 Dim StartupCat%(11)
 PlayStartupVideos()
 
-Include "Subtitles.bb"
+Include "src/core/Subtitles.bb"
 LoadSubtitles()
 
 SetFont Font2
@@ -426,6 +426,7 @@ Global Mesh_MagX#, Mesh_MagY#, Mesh_MagZ#
 ;player stats -------------------------------------------------------------------------------------------------------
 Const MAX_HEALTH# = 100.0
 Global Health# = MAX_HEALTH
+Const LIMB_HEAD% = 0, LIMB_TORSO% = 1, LIMB_ARM_L% = 2, LIMB_ARM_R% = 3, LIMB_LEG_L% = 4, LIMB_LEG_R% = 5
 Global DeathCause$, DeathPending% = False
 Global FallTimer#
 Global Sanity#, ForceMove#, ForceAngle#
@@ -535,8 +536,8 @@ Type ConsoleMsg
 	Field r%,g%,b%
 End Type
 
-Include "Bindings.bb"
-Include "Console.bb"
+Include "src/core/Bindings.bb"
+Include "src/core/Console.bb"
 
 If FileType(DataDir + "cfg\autoexec.cfg") = 1 Then
 ExecuteCfg(DataDir + "cfg\autoexec.cfg") EndIf
@@ -1100,11 +1101,11 @@ Const VIEWMODEL_GRAB_END# = 45.0
 
 ;----------------------------------------------  Items  -----------------------------------------------------
 
-Include "Items.bb"
+Include "src/game/Items.bb"
 
 ;--------------------------------------- Particles ------------------------------------------------------------
 
-Include "Particles.bb"
+Include "src/game/Particles.bb"
 
 ;-------------------------------------  Doors --------------------------------------------------------------
 
@@ -1561,9 +1562,9 @@ End Function
 Global DebugMapGen% = GetOptionInt("debug", "show map gen")
 Global DebugForestGen% = GetOptionInt("debug", "show forest gen")
 
-Include "MapSystem.bb"
+Include "src/game/MapSystem.bb"
 
-Include "NPCs.bb"
+Include "src/game/NPCs.bb"
 
 
 
@@ -1574,7 +1575,7 @@ Collisions HIT_APACHE, HIT_APACHE, 1, 2
 Collisions HIT_DEAD, HIT_MAP, 2, 2
 
 ;----------------------------------- meshes and textures ----------------------------------------------------------------
-Include "Effects.bb"
+Include "src/game/Effects.bb"
 Global ResizeTexture%
 
 Function InitFastResize()
@@ -1625,8 +1626,9 @@ Global MTF_CameraCheckDetected% = False
 
 ;---------------------------------------------------------------------------------------------------
 
-Include "SquadNet.bb"
-Include "menu.bb"
+Include "src/net/SquadNet.bb"
+Include "src/net/ItemNet.bb"
+Include "src/ui/Menu.bb"
 MainMenuOpen = True
 
 ;---------------------------------------------------------------------------------------------------
@@ -1808,6 +1810,7 @@ While IsRunning
 			UpdateEmitters()
 			MouseLook()
 			MovePlayer()
+			SquadNetWorldTick()
 			InFacility = CheckForPlayerInFacility()
 			UpdateDoors()
 			UpdateRooms()
@@ -1929,13 +1932,23 @@ End Function
 ;----------------------------------------------------------------------------------------------------------------------------------------------------
 
 
-Function DamagePlayer(amount#, cause$)
+Function DamagePlayer(amount#, cause$, limb% = 1)
 	If GodMode Then Return
-	If Health <= 0 Then Return
-	
+	If Health <= 0.0 Then Return
+	If limb% < LIMB_HEAD% Or limb% > LIMB_LEG_R% Then limb% = LIMB_TORSO%
+
+	Select limb%
+		Case LIMB_HEAD%
+			amount = amount * 2.5
+		Case LIMB_ARM_L%, LIMB_ARM_R%
+			amount = amount * 0.6
+		Case LIMB_LEG_L%, LIMB_LEG_R%
+			amount = amount * 0.5
+	End Select
+
 	Health = Max(Health - amount, 0.0)
 	DeathCause = cause
-	If Health <= 0 Then DeathPending = True
+	If Health <= 0.0 Then DeathPending = True
 End Function
 
 
@@ -1999,6 +2012,7 @@ Function DeathSequence()
 	
 	Health = MAX_HEALTH
 	Stamina = 100
+	ResetController()
 	If MTStartRoom <> Null Then Teleport(MTStartRoom)
 	
 	ResumeSounds()
@@ -2227,215 +2241,194 @@ End Function
 Global MoveX%, MoveZ%
 Global PlayerStepped%
 
+Const WALK_SPEED# = 0.0165
+
+Global ExhaustTimer#, BobSettle#, PrevMoveSpeed#, MoveDirX#, MoveDirZ#, Sprinting%
+
+Function ResetController()
+	CurrSpeed = 0.0
+	Shake = 0.0
+	BobPowerSmooth = 0.0
+	ExhaustTimer = 0.0
+	BobSettle = 0.0
+	PrevMoveSpeed = 0.0
+	MoveDirX = 0.0
+	MoveDirZ = 0.0
+	Sprinting = False
+End Function
+
+Function StepVolume#()
+	Local ratio# = Min(CurrSpeed / (WALK_SPEED * 2.0), 1.0)
+	Return (0.35 + (1.0 - 0.35) * ratio) * (1.0 - CrouchState * 0.6)
+End Function
+
 Function MovePlayer()
 	CatchErrors("Uncaught (MovePlayer)")
-	Local Sprint# = 1.0, Speed# = 0.018, i%, angle#
+	Local i%, temp#
 	PlayerStepped = False
 	
-	If SuperMan Then
-		Speed = Speed * 3
-		
-		SuperManTimer=SuperManTimer+FPSfactor
-		
-		CameraShake = Sin(SuperManTimer / 5.0) * (SuperManTimer / 1500.0)
-		
-		BlurTimer = 500		
-		HideEntity Fog
-	End If
-	
-	If CurrSpeed > 0 Then
-        Stamina = Min(Stamina + 0.15 * FPSfactor/1.25, 100.0)
-    Else
-        Stamina = Min(Stamina + 0.15 * FPSfactor*1.25, 100.0)
-    EndIf
-	
-	If StaminaEffectTimer > 0 Then
-		StaminaEffectTimer = StaminaEffectTimer - (FPSfactor/70)
-	Else
-		If StaminaEffect <> 1.0 Then StaminaEffect = 1.0
-	EndIf
-	
-	Local temp#
-	
-	If PlayerRoom\RoomTemplate\Name<>"pocketdimension" Then 
-		If KeyDown(KEY_SPRINT) Then
-			If Stamina < 5 Then
-				temp = 0
-				If WearingGasMask>0 Or Wearing1499>0 Then temp=1
-				If ChannelPlaying(BreathCHN)=False Then BreathCHN = PlaySound_Strict(BreathSFX((temp), 0))
-			ElseIf Stamina < 50
-				If BreathCHN=0 Then
-					temp = 0
-					If WearingGasMask>0 Or Wearing1499>0 Then temp=1
-					BreathCHN = PlaySound_Strict(BreathSFX((temp), Rand(1,3)))
-					ChannelVolume BreathCHN, Min((70.0-Stamina)/70.0,1.0)*SFXVolume
-				Else
-					If ChannelPlaying(BreathCHN)=False Then
-						temp = 0
-						If WearingGasMask>0 Or Wearing1499>0 Then temp=1
-						BreathCHN = PlaySound_Strict(BreathSFX((temp), Rand(1,3)))
-						ChannelVolume BreathCHN, Min((70.0-Stamina)/70.0,1.0)*SFXVolume			
-					EndIf
-				EndIf
-			EndIf
-		EndIf
-	EndIf
-	
-	If Wearing714 Then
-		Stamina = Min(Stamina, 10)
-		Sanity = Max(-850, Sanity)
-	EndIf
-	
-	If IsZombie Then Crouch = False
-	
-	If Abs(CrouchState-Crouch)<0.001 Then 
+	If Abs(CrouchState-Crouch)<0.001 Then
 		CrouchState = Crouch
 	Else
 		CrouchState = CurveValue(Crouch, CrouchState, 10.0)
 	EndIf
 	
-	If (Not NoClip) Then
-		If ForceMove > 0 Lor Playable And (MoveX <> 0 Lor MoveZ <> 0) Then
-			If Crouch = 0 And (KeyDown(KEY_SPRINT)) And Stamina > 0.0 And (Not IsZombie) Then
-				Sprint = 2.5
-				Stamina = Stamina - FPSfactor * 0.4 * StaminaEffect
-				If Stamina <= 0 Then Stamina = -20.0
-			End If
-			
-			If PlayerRoom\RoomTemplate\Name = "pocketdimension" Then 
-				If EntityY(Collider)<2000*RoomScale Or EntityY(Collider)>2608*RoomScale Then
-					Stamina = 0
-					Speed = 0.015
-					Sprint = 1.0					
-				EndIf
-			EndIf	
-			
-			If ForceMove>0 Then Speed=Speed*ForceMove
-			
-			temp# = (Shake Mod 360)
-			Local tempchn%
-			If (Not UnableToMove%) Then Shake# = (Shake + FPSfactor * Min(Sprint, 1.5) * 7) Mod 720
-			If temp < 180 And (Shake Mod 360) >= 180 And FallTimer >= 0 Then
-				PlayerStepped = True
-				If CurrStepSFX=0 Then
-					temp = GetStepSound(Collider)
-					
-					If Sprint = 1.0 Then
-						PlayerSoundVolume = Max(2.5-(Crouch*0.6),PlayerSoundVolume)
-						tempchn% = PlaySound_Strict(StepSFX(temp, 0, Rand(0, 7)))
-					Else
-						PlayerSoundVolume = Max(4.0,PlayerSoundVolume)
-						tempchn% = PlaySound_Strict(StepSFX(temp, 1, Rand(0, 7)))
-					End If
-				ElseIf CurrStepSFX=1
-					tempchn% = PlaySound_Strict(Step2SFX(Rand(0, 2)))
-				ElseIf CurrStepSFX=2
-					tempchn% = PlaySound_Strict(Step2SFX(Rand(3,5)))
-					If Sprint = 1.0 Then
-						PlayerSoundVolume = Max(2.5-(Crouch*0.6),PlayerSoundVolume)
-					Else
-						PlayerSoundVolume = Max(4.0,PlayerSoundVolume)
-					End If
-				ElseIf CurrStepSFX=3
-					If Sprint = 1.0 Then
-						PlayerSoundVolume = Max(2.5-(Crouch*0.6),PlayerSoundVolume)
-						tempchn% = PlaySound_Strict(StepSFX(0, 0, Rand(0, 7)))
-					Else
-						PlayerSoundVolume = Max(4.0,PlayerSoundVolume)
-						tempchn% = PlaySound_Strict(StepSFX(0, 1, Rand(0, 7)))
-					End If
-				EndIf
-				If tempchn <> 0 Then ChannelVolume tempchn, (1.0-(Crouch*0.6))*SFXVolume#
-			EndIf	
-		EndIf
-	Else ;noclip on
-		If (KeyDown(KEY_SPRINT)) Then 
-			Sprint = 2.5
-		ElseIf KeyDown(KEY_CROUCH)
-			Sprint = 0.5
-		EndIf
-	EndIf
-	
 	If KeyHit(KEY_CROUCH) And Playable Then Crouch = (Not Crouch)
 	
-	Local temp2# = (Speed * Sprint) / (1.0+CrouchState)
-	
-	If NoClip Then 
-		Shake = 0
-		CurrSpeed = 0
-		CrouchState = 0
+	If NoClip Then
+		Shake = 0.0
+		CurrSpeed = 0.0
+		CrouchState = 0.0
 		Crouch = 0
+		Sprinting = False
+		
+		temp = 0.018
+		If KeyDown(KEY_SPRINT) Then
+			temp = temp * 2.5
+		ElseIf KeyDown(KEY_CROUCH)
+			temp = temp * 0.5
+		EndIf
+		temp = temp * NoClipSpeed
 		
 		RotateEntity Collider, WrapAngle(EntityPitch(Camera)), WrapAngle(EntityYaw(Camera)), 0
 		
-		temp2 = temp2 * NoClipSpeed
+		If KeyDown(KEY_DOWN) Then MoveEntity Collider, 0, 0, -temp*FPSfactor
+		If KeyDown(KEY_UP) Then MoveEntity Collider, 0, 0, temp*FPSfactor
 		
-		If KeyDown(KEY_DOWN) Then MoveEntity Collider, 0, 0, -temp2*FPSfactor
-		If KeyDown(KEY_UP) Then MoveEntity Collider, 0, 0, temp2*FPSfactor
-		
-		If KeyDown(KEY_LEFT) Then MoveEntity Collider, -temp2*FPSfactor, 0, 0
-		If KeyDown(KEY_RIGHT) Then MoveEntity Collider, temp2*FPSfactor, 0, 0	
+		If KeyDown(KEY_LEFT) Then MoveEntity Collider, -temp*FPSfactor, 0, 0
+		If KeyDown(KEY_RIGHT) Then MoveEntity Collider, temp*FPSfactor, 0, 0
 		
 		ResetEntity Collider
 	Else
-		temp = False
-		If (Not IsZombie%)
-			If MoveInputCancelling Then
+		If MoveInputCancelling Then
+			MoveZ = KeyDown(KEY_DOWN) - KeyDown(KEY_UP)
+			MoveX = KeyDown(KEY_LEFT) - KeyDown(KEY_RIGHT)
+		Else
+			If KeyHit(KEY_DOWN) Then
+				MoveZ = 1
+			Else If KeyHit(KEY_UP)
+				MoveZ = -1
+			Else If MoveZ = 1 And (Not KeyDown(KEY_DOWN)) Then
+				MoveZ = -KeyDown(KEY_UP)
+			Else If MoveZ = -1 And (Not KeyDown(KEY_UP)) Then
+				MoveZ = KeyDown(KEY_DOWN)
+			Else If MoveZ = 0 Then
 				MoveZ = KeyDown(KEY_DOWN) - KeyDown(KEY_UP)
+			EndIf
+			
+			If KeyHit(KEY_LEFT) Then
+				MoveX = 1
+			Else If KeyHit(KEY_RIGHT)
+				MoveX = -1
+			Else If MoveX = 1 And (Not KeyDown(KEY_LEFT)) Then
+				MoveX = -KeyDown(KEY_RIGHT)
+			Else If MoveX = -1 And (Not KeyDown(KEY_RIGHT)) Then
+				MoveX = KeyDown(KEY_LEFT)
+			Else If MoveX = 0 Then
 				MoveX = KeyDown(KEY_LEFT) - KeyDown(KEY_RIGHT)
+			EndIf
+		EndIf
+		
+		Local hasInput% = False
+		Local inX# = 0.0, inZ# = 0.0, mag#
+		If ForceMove > 0 Then
+			hasInput = True
+			inX = Sin(ForceAngle)
+			inZ = Cos(ForceAngle)
+		ElseIf Playable And (MoveX <> 0 Or MoveZ <> 0)
+			hasInput = True
+			inX = MoveX
+			inZ = -MoveZ
+			mag = Sqr(inX*inX + inZ*inZ)
+			inX = inX / mag
+			inZ = inZ / mag
+		EndIf
+		
+		Local wantSprint% = hasInput And (ForceMove <= 0) And (Crouch = 0) And KeyDown(KEY_SPRINT)
+		
+		If ExhaustTimer > 0.0 Then
+			ExhaustTimer = Max(ExhaustTimer - FPSfactor, 0.0)
+			Stamina = 0.0
+			Sprinting = False
+		Else
+			If Sprinting Then
+				If (Not wantSprint) Or Stamina <= 0.0 Then Sprinting = False
+			ElseIf wantSprint And Stamina >= 12.0
+				Sprinting = True
+			EndIf
+			
+			If Sprinting Then
+				Stamina = Stamina - FPSfactor * 0.28
+				If Stamina <= 0.0 Then
+					Stamina = 0.0
+					Sprinting = False
+					ExhaustTimer = 210.0
+				EndIf
+			ElseIf CurrSpeed > 0.001
+				Stamina = Min(Stamina + 0.15 * FPSfactor / 1.25, 100.0)
 			Else
-				If KeyHit(KEY_DOWN) Then
-					MoveZ = 1
-				Else If KeyHit(KEY_UP)
-					MoveZ = -1
-				Else If MoveZ = 1 And (Not KeyDown(KEY_DOWN)) Then
-					MoveZ = -KeyDown(KEY_UP)
-				Else If MoveZ = -1 And (Not KeyDown(KEY_UP)) Then
-					MoveZ = KeyDown(KEY_DOWN)
-				Else If MoveZ = 0 Then
-					MoveZ = KeyDown(KEY_DOWN) - KeyDown(KEY_UP)
-				EndIf
-
-				If KeyHit(KEY_LEFT) Then
-					MoveX = 1
-				Else If KeyHit(KEY_RIGHT)
-					MoveX = -1
-				Else If MoveX = 1 And (Not KeyDown(KEY_LEFT)) Then
-					MoveX = -KeyDown(KEY_RIGHT)
-				Else If MoveX = -1 And (Not KeyDown(KEY_RIGHT)) Then
-					MoveX = KeyDown(KEY_LEFT)
-				Else If MoveX = 0 Then
-					MoveX = KeyDown(KEY_LEFT) - KeyDown(KEY_RIGHT)
-				EndIf
+				Stamina = Min(Stamina + 0.15 * FPSfactor * 1.25, 100.0)
 			EndIf
-
-			If moveZ > 0 And Playable Then
-				temp = True
-				If moveX = 0 Then angle = 180 Else angle = 135 * moveX
-			ElseIf moveZ < 0 And Playable Then
-				temp = True
-				If moveX = 0 Then angle = 0 Else angle = 45 * moveX
-			ElseIf ForceMove>0 Then
-				temp=True
-				angle = ForceAngle
-			Else If Playable And moveX <> 0 Then
-				temp = True
-				angle = 90 * moveX
-			EndIf
-		Else
-			temp=True
-			angle = ForceAngle
 		EndIf
 		
-		angle = WrapAngle(EntityYaw(Collider,True)+angle+90.0)
-		
-		If temp Then 
-			CurrSpeed = CurveValue(temp2, CurrSpeed, 20.0)
-		Else
-			CurrSpeed = Max(CurveValue(0.0, CurrSpeed-0.1, 1.0),0.0)
+		If ExhaustTimer > 0.0 Then
+			If ChannelPlaying(BreathCHN) = False Then BreathCHN = PlaySound_Strict(BreathSFX(0, 0))
+		ElseIf Sprinting And Stamina < 50.0
+			If ChannelPlaying(BreathCHN) = False Then
+				BreathCHN = PlaySound_Strict(BreathSFX(0, Rand(1,3)))
+				ChannelVolume BreathCHN, Min((70.0-Stamina)/70.0,1.0)*SFXVolume
+			EndIf
 		EndIf
 		
-		If (Not UnableToMove%) And FallTimer >= 0 Then TranslateEntity Collider, Cos(angle)*CurrSpeed * FPSfactor, 0, Sin(angle)*CurrSpeed * FPSfactor, True
+		Local targetSpeed# = 0.0
+		If hasInput And (Not UnableToMove) Then
+			If ForceMove > 0 Then
+				targetSpeed = WALK_SPEED * ForceMove
+			ElseIf Sprinting
+				targetSpeed = WALK_SPEED * 2.0
+			Else
+				targetSpeed = WALK_SPEED * (1.0 - (1.0-0.5) * CrouchState)
+			EndIf
+		EndIf
+		
+		If targetSpeed > CurrSpeed Then
+			CurrSpeed = Min(CurrSpeed + 0.0009 * FPSfactor, targetSpeed)
+		Else
+			CurrSpeed = Max(CurrSpeed - 0.0015 * FPSfactor, targetSpeed)
+		EndIf
+		
+		If hasInput Then
+			If CurrSpeed < 0.002 Then
+				MoveDirX = inX
+				MoveDirZ = inZ
+			Else
+				Local blend# = Min(0.12 * FPSfactor, 1.0)
+				MoveDirX = MoveDirX + (inX - MoveDirX) * blend
+				MoveDirZ = MoveDirZ + (inZ - MoveDirZ) * blend
+			EndIf
+		EndIf
+		
+		If (Not UnableToMove) Then
+			Local yaw# = EntityYaw(Collider, True)
+			Local wx# = -Sin(yaw)*MoveDirZ - Cos(yaw)*MoveDirX
+			Local wz# = Cos(yaw)*MoveDirZ - Sin(yaw)*MoveDirX
+			TranslateEntity Collider, wx*CurrSpeed*FPSfactor, 0, wz*CurrSpeed*FPSfactor, True
+		EndIf
+		
+		If (Not UnableToMove) And CurrSpeed > 0.002 Then
+			temp = Shake Mod 360
+			Shake = (Shake + FPSfactor * Min(CurrSpeed / WALK_SPEED, 1.5) * 7.0) Mod 720
+			If temp < 180 And (Shake Mod 360) >= 180 Then
+				PlayerStepped = True
+				Local stepType% = 0
+				If CurrSpeed > WALK_SPEED * 1.25 Then stepType = 1
+				Local stepChn% = PlaySound_Strict(StepSFX(GetStepSound(Collider), stepType, Rand(0, 7)))
+				If stepChn <> 0 Then ChannelVolume stepChn, StepVolume() * SFXVolume
+			EndIf
+		EndIf
+		
+		If PrevMoveSpeed >= WALK_SPEED * 0.4 And CurrSpeed < WALK_SPEED * 0.4 And (Not hasInput) Then BobSettle = Max(BobSettle, 0.3)
+		PrevMoveSpeed = CurrSpeed
 		
 		Local CollidedFloor% = False
 		For i = 1 To CountCollisions(Collider)
@@ -2443,21 +2436,12 @@ Function MovePlayer()
 		Next
 		
 		If CollidedFloor = True Then
-			If DropSpeed# < - 0.07 Then 
-				If CurrStepSFX=0 Then
-					PlaySound_Strict(StepSFX(GetStepSound(Collider), 0, Rand(0, 7)))
-				ElseIf CurrStepSFX=1
-					PlaySound_Strict(Step2SFX(Rand(0, 2)))
-				ElseIf CurrStepSFX=2
-					PlaySound_Strict(Step2SFX(Rand(3, 5)))
-				ElseIf CurrStepSFX=3
-					PlaySound_Strict(StepSFX(0, 0, Rand(0, 7)))
-				EndIf
-				PlayerSoundVolume = Max(3.0,PlayerSoundVolume)
+			If DropSpeed# < - 0.07 Then
+				PlaySound_Strict(StepSFX(GetStepSound(Collider), 0, Rand(0, 7)))
+				BobSettle = Max(BobSettle, Min(Abs(DropSpeed) * 3.0, 1.0))
 			EndIf
 			DropSpeed# = 0
 		Else
-			;DropSpeed# = Min(Max(DropSpeed - 0.006 * FPSfactor, -2.0), 0.0)
 			If PlayerFallingPickDistance#<>0.0
 				Local pick = LinePick(EntityX(Collider),EntityY(Collider),EntityZ(Collider),0,-PlayerFallingPickDistance,0)
 				If pick
@@ -2481,7 +2465,6 @@ Function MovePlayer()
 		If KeyDown(KEY_BLINK) And BlinkTimer < - 10 Then BlinkTimer = -10
 	EndIf
 	
-	
 	CatchErrors("MovePlayer")
 End Function
 
@@ -2492,86 +2475,58 @@ End Function
 Function MouseLook(handleInput% = True)
 	Local i%
 	
-	CameraShake = Max(CameraShake - (FPSfactor / 10), 0)
-	
-	;CameraZoomTemp = CurveValue(CurrCameraZoom,CameraZoomTemp, 5.0)
 	ZoomCamera(FOV)
 	CurrCameraZoom = Max(CurrCameraZoom - FPSfactor, 0)
 	
-	If FallTimer >= 0 Then
-		
-		HeadDropSpeed = 0
-		
-		;fixing the black screen bug with some bubblegum code 
-		If IsNaN(EntityX(Collider)) Then
-			PositionEntity Collider, EntityX(Camera, True), EntityY(Camera, True) - 0.5, EntityZ(Camera, True), True
-			Msg = "EntityX(Collider) = NaN, RESETTING COORDINATES    -    New coordinates: "+EntityX(Collider)
-			MsgTimer = 300				
-		EndIf
-		;EndIf
-		
-		Local bobAmount# = Min(CurrSpeed / 0.018, 2.5)
-		Local bobTarget# = Min(bobAmount, 1.8)
-		BobPowerSmooth = CurveValue(bobTarget, BobPowerSmooth, 10.0)
-		Local bobPower# = BobPowerSmooth
-		Local bobScale# = ViewBobScale * (1.0 - CrouchState*0.65)
-
-		If bobAmount > 0.02 Then
-			BobPhase = BobPhase + FPSfactor * (6.28318 * (1.25 + bobAmount*0.35) / 70.0)
-			If BobPhase > 6.28318 Then BobPhase = BobPhase - 6.28318
-		EndIf
-
-		Local side# = Sin(BobPhase) * 0.028 * bobPower * bobScale
-		Local up# = (Sin(Shake) / (20.0+CrouchState*20.0))*0.6*ViewBobScale
-		Local fwd# = Cos(BobPhase*2.0) * 0.012 * bobPower * bobScale
-		Local bobRoll# = Sin(BobPhase) * 1.2 * bobPower * bobScale
-
-		PositionEntity Camera, EntityX(Collider), EntityY(Collider), EntityZ(Collider)
-		RotateEntity Camera, 0, EntityYaw(Collider), bobRoll*0.5
-
-		MoveEntity Camera, side, up + 0.6 + CrouchState * -0.3, fwd
-		
-		;RotateEntity Collider, EntityPitch(Collider), EntityYaw(Collider), 0
-		;moveentity player, side, up, 0	
-		; -- Update the smoothing que To smooth the movement of the mouse.
-		Local rawX# = MouseXSpeed() * (MouseSens + 0.6)
-		Local rawY# = MouseYSpeed() * (MouseSens + 0.6)
-		Local S# = (6.0 / (MouseSens + 1.0)) * MouseSmooth
-		Local tau# = S / 70.0
-
-		If MouseSmooth <= 0 Then
-			mouse_x_speed_1# = rawX
-			mouse_y_speed_1# = rawY
-		Else
-			mouse_x_speed_1# = SmoothMouseValue(rawX, mouse_x_speed_1, tau)
-			mouse_y_speed_1# = SmoothMouseValue(rawY, mouse_y_speed_1, tau)
-		EndIf
-
-		If IsNaN(mouse_x_speed_1) Lor (Not handleInput) Then mouse_x_speed_1 = 0
-		If IsNaN(mouse_y_speed_1) Lor (Not handleInput) Then mouse_y_speed_1 = 0
-
-		If InvertMouse Then mouse_y_speed_1 = -mouse_y_speed_1
-		
-		Local the_yaw# = mouse_x_speed_1 * mouselook_x_inc# / (1.0+WearingVest)
-		Local the_pitch# = mouse_y_speed_1 * mouselook_y_inc# / (1.0+WearingVest)
-		
-		TurnEntity Collider, 0.0, -the_yaw#, 0.0, 1 ; Turn the user on the Y (yaw) axis.
-		user_camera_pitch# = user_camera_pitch# + the_pitch#
-		; -- Limit the user;s camera To within 180 degrees of pitch rotation. ;EntityPitch(); returns useless values so we need To use a variable To keep track of the camera pitch.
-		If user_camera_pitch# > 70.0 Then user_camera_pitch# = 70.0
-		If user_camera_pitch# < - 70.0 Then user_camera_pitch# = -70.0
-		
-		RotateEntity Camera, WrapAngle(user_camera_pitch + Rnd(-CameraShake*FPSfactor, CameraShake*FPSfactor) * ViewBobScale), WrapAngle(EntityYaw(Collider) + Rnd(-CameraShake*FPSfactor, CameraShake*FPSfactor) * ViewBobScale), bobRoll ; Pitch the user;s camera up And down.
-		
-		If PlayerRoom\RoomTemplate\Name = "pocketdimension" Lor PlayerRoom\RoomTemplate\Name = "halloweenpd" Then
-			If EntityY(Collider)<2000*RoomScale Or EntityY(Collider)>2608*RoomScale Then
-				RotateEntity Camera, WrapAngle(EntityPitch(Camera)),WrapAngle(EntityYaw(Camera)), WrapAngle(Sin(MilliSecs()/150.0)*30.0)*ViewBobScale ; Pitch the user;s camera up And down.
-			EndIf
-		EndIf
-		
+	If IsNaN(EntityX(Collider)) Then
+		PositionEntity Collider, EntityX(Camera, True), EntityY(Camera, True) - 0.5, EntityZ(Camera, True), True
+		Msg = "EntityX(Collider) = NaN, RESETTING COORDINATES    -    New coordinates: "+EntityX(Collider)
+		MsgTimer = 300
 	EndIf
 	
-	;pölyhiukkasia
+	BobPowerSmooth = CurveValue(Min(CurrSpeed / WALK_SPEED, 1.3), BobPowerSmooth, 10.0)
+	BobSettle = CurveValue(0.0, BobSettle, 6.0)
+	Local bobPower# = BobPowerSmooth
+	Local bobScale# = ViewBobScale * (1.0 - CrouchState*0.65)
+	
+	Local side# = Sin(Shake*0.5) * 0.012 * bobPower * bobScale
+	Local up# = Cos(Shake) * 0.012 * bobPower * (1.0 - CrouchState*0.5) * ViewBobScale
+	Local fwd# = Cos(Shake) * 0.005 * bobPower * bobScale
+	Local bobRoll# = Sin(Shake*0.5) * 0.5 * bobPower * bobScale
+	
+	PositionEntity Camera, EntityX(Collider), EntityY(Collider), EntityZ(Collider)
+	RotateEntity Camera, 0, EntityYaw(Collider), bobRoll*0.5
+	
+	MoveEntity Camera, side, up + 0.6 + CrouchState * -0.3 - BobSettle * 0.04 * ViewBobScale, fwd
+	
+	Local rawX# = MouseXSpeed() * (MouseSens + 0.6)
+	Local rawY# = MouseYSpeed() * (MouseSens + 0.6)
+	Local S# = (6.0 / (MouseSens + 1.0)) * MouseSmooth
+	Local tau# = S / 70.0
+	
+	If MouseSmooth <= 0 Then
+		mouse_x_speed_1# = rawX
+		mouse_y_speed_1# = rawY
+	Else
+		mouse_x_speed_1# = SmoothMouseValue(rawX, mouse_x_speed_1, tau)
+		mouse_y_speed_1# = SmoothMouseValue(rawY, mouse_y_speed_1, tau)
+	EndIf
+	
+	If IsNaN(mouse_x_speed_1) Lor (Not handleInput) Then mouse_x_speed_1 = 0
+	If IsNaN(mouse_y_speed_1) Lor (Not handleInput) Then mouse_y_speed_1 = 0
+	
+	If InvertMouse Then mouse_y_speed_1 = -mouse_y_speed_1
+	
+	Local the_yaw# = mouse_x_speed_1 * mouselook_x_inc# / (1.0+WearingVest)
+	Local the_pitch# = mouse_y_speed_1 * mouselook_y_inc# / (1.0+WearingVest)
+	
+	TurnEntity Collider, 0.0, -the_yaw#, 0.0, 1
+	user_camera_pitch# = user_camera_pitch# + the_pitch#
+	If user_camera_pitch# > 70.0 Then user_camera_pitch# = 70.0
+	If user_camera_pitch# < - 70.0 Then user_camera_pitch# = -70.0
+	
+	RotateEntity Camera, WrapAngle(user_camera_pitch), WrapAngle(EntityYaw(Collider)), bobRoll
+	
 	If ParticleAmount=2
 		If Rand(35/FPSfactor) = 1 Then
 			Local pvt% = CreatePivot()
@@ -2821,7 +2776,7 @@ End Function
 
 ;----------------------------------------------------------------------------------------------
 
-Include "LoadAllSounds.bb"
+Include "src/game/LoadAllSounds.bb"
 Function LoadEntities()
 	CatchErrors("Uncaught (LoadEntities)")
 	DrawLoading(0)
@@ -3403,6 +3358,7 @@ End Function
 
 Function InitNewGame()
 	CatchErrors("Uncaught (InitNewGame)")
+	ItemNetReset()
 	Local i%, d.Doors, it.Items, r.Rooms, sc.SecurityCams
 
 	DrawLoading(45)
@@ -3466,6 +3422,7 @@ Function InitNewGame()
 	HidePointer()
 	BlinkTimer = -10
 	Stamina = 100
+	ResetController()
 	Health = MAX_HEALTH
 	DeathPending = False
 	DeathCause = ""
@@ -3537,8 +3494,7 @@ Function NullGame(playbuttonsfx%=True)
 	Next
 	
 	DropSpeed = 0
-	Shake = 0
-	CurrSpeed = 0
+	ResetController()
 	
 	StaminaEffect = 1.0
 	StaminaEffectTimer = 0

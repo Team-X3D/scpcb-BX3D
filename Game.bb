@@ -7,4 +7,4 @@
 
 ;    See Credits.txt for a list of contributors
 
-Include "Main.bb"
+Include "src/core/Main.bb"
