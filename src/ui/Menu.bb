@@ -30,10 +30,6 @@ Dim MenuTitleChar$(2)
 Dim MenuTitleCharW#(2)
 Global MenuTitleLen%, MenuTitleW#, MenuTitleH#
 
-Global RandomSeed$, RandomSeedNumeric%, HasNumericSeed%
-Function GetRandomSeed%()
-	If HasNumericSeed Then Return RandomSeedNumeric Else Return GenerateSeedNumber(RandomSeed)
-End Function
 
 Function MenuInitText()
 	MenuVersion$ = "BUILD " + VersionNumber
@@ -576,15 +572,6 @@ Function UpdateMainMenu()
 	MenuDraw()
 
 	If act% = 0 Then
-		If UseNumericSeeds Then
-			If RandomSeedNumeric = 0 Then RandomSeedNumeric = MilliSecs()
-		Else
-			If RandomSeed = "" Then RandomSeed = Abs(MilliSecs())
-		EndIf
-
-		SeedRnd GetRandomSeed()
-		SetErrorMsg(7, GetSeedString(False))
-
 		LoadEntities()
 		LoadAllSounds()
 		InitRoomTemplates()

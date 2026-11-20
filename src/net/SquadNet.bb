@@ -13,7 +13,6 @@ Global SquadNetHasWelcome%
 Global SquadNetLocalSlot% = -1
 Global SquadNetStarted%
 Global SquadNetPendingStart%
-Global SquadNetStartSeed%
 Global SquadNetJoining%, SquadNetJoinDeadline%
 Global SquadNetRosterSynced%
 
@@ -22,6 +21,7 @@ Dim SquadNetSlotPeer%(NET_MAX_PLAYERS-1)
 Dim NetPX#(NET_MAX_PLAYERS-1), NetPY#(NET_MAX_PLAYERS-1), NetPZ#(NET_MAX_PLAYERS-1), NetPYaw#(NET_MAX_PLAYERS-1)
 Dim RemoteBody%(NET_MAX_PLAYERS-1)
 Dim NetPSeen%(NET_MAX_PLAYERS-1)
+Dim NetPState%(NET_MAX_PLAYERS-1)
 Global NetPosNext%
 
 ;-------------------------------------------------- helpers ------------------------------------------------
@@ -223,6 +223,11 @@ End Function
 Function SquadNetHandleMsg(msg$)
 	Local tag$ = SquadNetField$(msg$, 1)
 	Local sl%
+	If tag$ = "pstate" Then
+		sl = Int(SquadNetField$(msg$, 2))
+		If sl >= 0 And sl <= NET_MAX_PLAYERS-1 Then NetPState%(sl) = Int(SquadNetField$(msg$, 3))
+		Return
+	EndIf
 	If tag$ = "pos" Then
 		sl = Int(SquadNetField$(msg$, 2))
 		If sl >= 0 And sl <= NET_MAX_PLAYERS-1 Then
@@ -250,7 +255,6 @@ Function SquadNetHandleMsg(msg$)
 		SquadNetDisconnect()
 		SquadNetStatus$ = "SESSION ALREADY STARTED"
 	ElseIf tag$ = "start" Then
-		SquadNetStartSeed = Int(SquadNetField$(msg$, 2))
 		SquadNetPendingStart = True
 	EndIf
 End Function
@@ -304,6 +308,13 @@ Function SquadNetUpdate()
 	If SquadNetIsHost Then SquadNetHostSweep()
 End Function
 
+Function SquadNetSendState(state%)
+	If SquadNetSession = 0 Then Return
+	If NetConnected(SquadNetSession) = 0 Then Return
+	If SquadNetLocalSlot < 0 Then Return
+	NetBroadcast(SquadNetSession, "pstate|"+Str(SquadNetLocalSlot)+"|"+Str(state%), True)
+End Function
+
 Function SquadNetSendPos()
 	If SquadNetSession = 0 Then Return
 	If NetConnected(SquadNetSession) = 0 Then Return
@@ -334,6 +345,13 @@ Function SquadNetWorldTick()
 				PositionEntity RemoteBody%(i%), CurveValue(NetPX#(i%), EntityX(RemoteBody%(i%)), 4.0), CurveValue(NetPY#(i%)+0.15, EntityY(RemoteBody%(i%)), 4.0), CurveValue(NetPZ#(i%), EntityZ(RemoteBody%(i%)), 4.0)
 				RotateEntity RemoteBody%(i%), 0, CurveAngle(NetPYaw#(i%), EntityYaw(RemoteBody%(i%)), 6.0), 0
 			EndIf
+			If NetPState%(i%) = 2 Then
+				HideEntity RemoteBody%(i%)
+			ElseIf NetPState%(i%) = 1 Then
+				EntityColor RemoteBody%(i%), 90, 40, 40
+			Else
+				EntityColor RemoteBody%(i%), 190, 70, 70
+			EndIf
 		Else
 			If RemoteBody%(i%) <> 0 Then HideEntity RemoteBody%(i%)
 			If SquadNetSlots$(i%) = "" Then NetPSeen%(i%) = False
@@ -347,10 +365,8 @@ Function SquadNetStartFloor()
 	If SquadNetSession = 0 Then Return
 	If SquadNetIsHost = 0 Then Return
 	If NetConnected(SquadNetSession) = 0 Then Return
-	SquadNetStartSeed = GetRandomSeed()
-	If SquadNetStartSeed = 0 Then SquadNetStartSeed = MilliSecs()
 	SquadNetStarted = True
-	NetBroadcast(SquadNetSession, "start|"+Str(SquadNetStartSeed), True)
+	NetBroadcast(SquadNetSession, "start", True)
 	SquadNetPendingStart = True
 End Function
 
@@ -363,11 +379,6 @@ Function SquadNetBeginGame()
 		NetPZ#(i%) = 0.0
 		NetPYaw#(i%) = 0.0
 	Next
-	HasNumericSeed = True
-	RandomSeedNumeric = SquadNetStartSeed
-	RandomSeed$ = Str(SquadNetStartSeed)
-	SeedRnd GetRandomSeed()
-	SetErrorMsg(7, GetSeedString(False))
 	LoadEntities()
 	LoadAllSounds()
 	InitRoomTemplates()
@@ -393,5 +404,5 @@ Function SquadNetPrintChecksum()
 	Next
 	Local who$ = "CLIENT"
 	If SquadNetIsHost Then who$ = "HOST"
-	CreateConsoleMsg("COOP "+who$+" seed "+Str(SquadNetStartSeed)+" rooms "+Str(n%)+" checksum "+Hex(h))
+	CreateConsoleMsg("COOP "+who$+" rooms "+Str(n%)+" checksum "+Hex(h))
 End Function

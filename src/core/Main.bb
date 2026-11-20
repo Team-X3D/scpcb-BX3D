@@ -135,8 +135,6 @@ Global ClosedCaptionsEnabled% = GetOptionInt("audio", "closed captions")
 
 Global CanOpenConsole% = True
 
-Global UseNumericSeeds% = GetOptionInt("general", "numeric seeds")
-
 Dim ArrowIMG(4)
 
 ;[Block]
@@ -428,6 +426,10 @@ Const MAX_HEALTH# = 100.0
 Global Health# = MAX_HEALTH
 Const LIMB_HEAD% = 0, LIMB_TORSO% = 1, LIMB_ARM_L% = 2, LIMB_ARM_R% = 3, LIMB_LEG_L% = 4, LIMB_LEG_R% = 5
 Global DeathCause$, DeathPending% = False
+Global PlayerDowned%, PlayerDead%, DownTimer#, ReviveProgress#
+Const DOWN_BLEEDOUT# = 2100.0
+Const REVIVE_TIME# = 210.0
+Const REVIVE_RANGE# = 1.6
 Global FallTimer#
 Global Sanity#, ForceMove#, ForceAngle#
 Global RestoreSanity%
@@ -1559,10 +1561,11 @@ Function RemoveDoor(d.Doors)
 	Delete d
 End Function
 
-Global DebugMapGen% = GetOptionInt("debug", "show map gen")
 Global DebugForestGen% = GetOptionInt("debug", "show forest gen")
 
 Include "src/game/MapSystem.bb"
+Include "src/levels/level_api.bb"
+Include "src/levels/levels.bb"
 
 Include "src/game/NPCs.bb"
 
@@ -1948,12 +1951,91 @@ Function DamagePlayer(amount#, cause$, limb% = 1)
 
 	Health = Max(Health - amount, 0.0)
 	DeathCause = cause
-	If Health <= 0.0 Then DeathPending = True
+	If Health <= 0.0 Then
+		If SquadNetSession <> 0 Then
+			DownPlayer(cause)
+		Else
+			DeathPending = True
+		EndIf
+	EndIf
+End Function
+
+Function DownPlayer(cause$)
+	If PlayerDowned Lor PlayerDead Then Return
+	PlayerDowned = True
+	Health = 1.0
+	DownTimer = DOWN_BLEEDOUT
+	ReviveProgress = 0.0
+	UnableToMove = True
+	Crouch = True
+	DeathCause = cause
+	If SquadNetSession <> 0 Then SquadNetSendState(1)
+	Msg = "you are down"
+	MsgTimer = 70*6
+End Function
+
+Function RevivePlayer()
+	PlayerDowned = False
+	PlayerDead = False
+	Health = 30.0
+	DownTimer = 0.0
+	ReviveProgress = 0.0
+	UnableToMove = False
+	Crouch = False
+	If SquadNetSession <> 0 Then SquadNetSendState(0)
+End Function
+
+Function ExecutePlayer()
+	If PlayerDead Then Return
+	PlayerDowned = False
+	PlayerDead = True
+	Health = 0.0
+	UnableToMove = True
+	If SquadNetSession <> 0 Then
+		SquadNetSendState(2)
+	Else
+		DeathPending = True
+	EndIf
+End Function
+
+Function UpdateDowned()
+	If PlayerDead Then Return
+	If Not PlayerDowned Then Return
+
+	DownTimer = DownTimer - FPSfactor
+	If DownTimer <= 0.0 Then
+		ExecutePlayer()
+		Return
+	EndIf
+
+	Local helper% = False
+	For i% = 0 To NET_MAX_PLAYERS-1
+		If i% <> SquadNetLocalSlot And SquadNetSlots$(i%) <> "" And NetPSeen%(i%) <> 0 And NetPState%(i%) = 0 Then
+			Local dx# = NetPX#(i%)-EntityX(Collider)
+			Local dy# = NetPY#(i%)-EntityY(Collider)
+			Local dz# = NetPZ#(i%)-EntityZ(Collider)
+			If Sqr(dx#*dx# + dy#*dy# + dz#*dz#) < REVIVE_RANGE Then helper% = True
+		EndIf
+	Next
+
+	If helper% Then
+		ReviveProgress = ReviveProgress + FPSfactor
+		If ReviveProgress >= REVIVE_TIME Then RevivePlayer()
+	Else
+		ReviveProgress = 0.0
+	EndIf
 End Function
 
 
 Function DeathSequence()
 	DeathPending = False
+	If SquadNetSession <> 0 Then
+		PlayerDead = True
+		PlayerDowned = False
+		UnableToMove = True
+		SquadNetSendState(2)
+		Return
+	EndIf
 	
 	PauseSounds()
 	If MusicCHN <> 0 Then
@@ -2749,21 +2831,6 @@ Function DrawMenu()
 End Function
 
 
-Function GetSeedString$(loc%=True)
-	If loc Then
-		If HasNumericSeed Then
-			Return I_Loc\Menu_SeedNumeric+" "+Str(RandomSeedNumeric)
-		Else
-			Return I_Loc\Menu_Seed+" "+RandomSeed
-		EndIf
-	Else
-		If HasNumericSeed Then
-			Return "Map seed (numeric): "+Str(RandomSeedNumeric)
-		Else
-			Return "Map seed: "+RandomSeed
-		EndIf
-	EndIf
-End Function
 
 Function MouseOn%(x%, y%, width%, height%)
 	If ScaledMouseX() > x And ScaledMouseX() < x + width Then
@@ -3409,13 +3476,17 @@ Function InitNewGame()
 	Next
 
 	If MTStartRoom <> Null Then
-		PositionEntity(Collider, EntityX(MTStartRoom\obj), EntityY(MTStartRoom\obj) + 0.5, EntityZ(MTStartRoom\obj))
+		If LevelSpawnSet Then
+			PositionEntity Collider, LevelSpawnX#, LevelSpawnY#, LevelSpawnZ#
+			RotateEntity Collider, 0, LevelSpawnYaw#, 0
+		Else
+			PositionEntity(Collider, EntityX(MTStartRoom\obj), EntityY(MTStartRoom\obj) + 0.5, EntityZ(MTStartRoom\obj))
+			TurnEntity(Collider, 0, Rand(160, 200), 0)
+		EndIf
 		PlayerRoom = MTStartRoom
-		it = CreateItem("heatdump", EntityX(MTStartRoom\obj)+0.6, EntityY(MTStartRoom\obj)+0.8, EntityZ(MTStartRoom\obj)+0.8)
 	EndIf
 
 	ResetAllRMeshes()
-	TurnEntity(Collider, 0, Rand(160, 200), 0)
 	ResetEntity Collider
 
 	SetFont Font1
@@ -3483,15 +3554,6 @@ Function NullGame(playbuttonsfx%=True)
 	GameSaved = 0
 	
 	HideDistance# = 15.0
-	
-	For lvl = 0 To 0
-		For x = 0 To MapWidth+1
-			For y = 0 To MapHeight+1
-				MapTemp(x, y) = 0
-				MapFound(x, y) = 0
-			Next
-		Next
-	Next
 	
 	DropSpeed = 0
 	ResetController()
@@ -4272,16 +4334,6 @@ Dim Keyboard294$(0,0,0)
 
 ;--------------------------------------- math -------------------------------------------------------
 
-Function GenerateSeedNumber(seed$)
- 	Local temp% = 0
- 	Local shift% = 0
- 	For i = 1 To Len(seed)
- 		temp = temp Xor (Asc(Mid(seed,i,1)) Shl shift)
- 		shift=(shift+1) Mod 24
-	Next
- 	Return temp
-End Function
-
 Function Distance#(x1#, y1#, x2#, y2#)
 	Local x# = x2 - x1, y# = y2 - y1
 	Return(Sqr(x*x + y*y))
@@ -4798,7 +4850,6 @@ Function SaveOptionsINI()
 	PutINIValue(OptionFile, "console", "enabled", CanOpenConsole%)
 	PutINIValue(OptionFile, "console", "auto opening", ConsoleOpening%)
 	PutINIValue(OptionFile, "general", "speed run mode", SpeedRunMode%)
-	PutINIValue(OptionFile, "general", "numeric seeds", UseNumericSeeds%)
 	PutINIValue(OptionFile, "controls", "mouse smoothing", MouseSmooth)
 	PutINIValue(OptionFile, "graphics", "hud scale factor", HUDScaleFactor)
 	PutINIValue(OptionFile, "graphics", "hud offset", HUDOffsetScale)

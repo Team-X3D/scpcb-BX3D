@@ -1688,8 +1688,6 @@ Const MapOptions$ = "Data\map.ini"
 Const RoomScale# = 8.0 / 2048.0
 Const ZONEAMOUNT = 3
 Global MapWidth%, MapHeight%
-Dim MapTemp%(0,0)
-Dim MapFound%(0,0)
 
 Global RoomAmbience%[20]
 
@@ -1709,6 +1707,8 @@ Type Rooms
 	Field found%
 	
 	Field obj%
+	Field cullMarker%
+	Field visToken%, visDepth%
 	Field x#, y#, z#
 	Field angle%
 	Field RoomTemplate.RoomTemplates
@@ -2110,13 +2110,11 @@ End Function
 Function UpdateRooms()
 	CatchErrors("Uncaught (UpdateRooms)")
 	Local dist#, i%, j%, r.Rooms
+
+	LevelUpdateVisibility()
 	
 	Local x#,z#
 	
-	;The reason why it is like this:
-	;	When the map gets spawned by a seed, it starts from LCZ to HCZ to EZ (bottom to top)
-	;	A map loaded by the map creator starts from EZ to HCZ to LCZ (top to bottom) and that's why this little code thing with the (SelectedMap="") needs to be there
-	;	- ENDSHN
 	If (EntityZ(Collider)/2.0)<I_Zone\Transition[1]-(SelectedMap=-1) Then
 		PlayerZone=2
 	ElseIf (EntityZ(Collider)/2.0)>=I_Zone\Transition[1]-(SelectedMap=-1) And (EntityZ(Collider)/2.0)<I_Zone\Transition[0]-(SelectedMap=-1) Then
@@ -2185,10 +2183,16 @@ Function UpdateRooms()
 		EndIf
 		
 		Local visible% = False
-		If r = PlayerRoom Then visible = True
-		If (Not visible) And IsRoomAdjacent(PlayerRoom, r) Then visible = True
-		If (Not visible) And r\dist < 16.0 Then
-			If EntityInView(GetChild(r\obj, 2), Camera) Then visible = True
+		If PortalCount% > 0 Then
+			If r\visToken = VisToken% Then visible = True
+		Else
+			If r = PlayerRoom Then visible = True
+			If (Not visible) And IsRoomAdjacent(PlayerRoom, r) Then visible = True
+			If (Not visible) And r\dist < 16.0 Then
+				Local marker% = r\cullMarker
+				If marker% = 0 Then marker% = GetChild(r\obj, 2)
+				If marker% = 0 Lor EntityInView(marker%, Camera) Then visible = True
+			EndIf
 		EndIf
 
 		If visible Then
@@ -2208,8 +2212,6 @@ Function UpdateRooms()
 		EndIf
 	Next
 	
-	Local mapX = Floor(EntityX(PlayerRoom\obj) / spacing), mapZ = Floor(EntityZ(PlayerRoom\obj) / spacing)
-	If mapX >= 0 And mapZ >= 0 And mapX <= MapWidth And mapZ <= MapHeight Then MapFound(mapX, mapZ) = 1
 	PlayerRoom\found = True
 	
 	TempLightVolume = Max(TempLightVolume / 4.5, 1.0)
@@ -2774,8 +2776,6 @@ Function UpdateScreens()
 	
 End Function
 
-Dim MapName$(0, 0)
-Dim MapRoomID%(ROOM4 + 1)
 Dim MapRoom$(ROOM4 + 1, 0)
 
 Dim RoomAmounts(ROOM4 + 1, ZONEAMOUNT)
@@ -2982,505 +2982,13 @@ End Function
 ;-------------------------------------------------------------------------------------------------------
 
 
-Function CreateMapLayout()
-	Local x% = Floor(MapWidth / 2)
-	Local y% = MapHeight - 2;Rand(3, 5)
-	
-	For i = y To MapHeight - 1
-		MapTemp(x, i) = True
-	Next
-	
-	Repeat
-		Local width% = Rand(Floor(MapWidth*0.6), Floor(MapWidth*0.85))
-		
-		If x > MapWidth*0.6 Then
-			width = -width
-		ElseIf x > MapWidth*0.4
-			x = x-width/2
-		EndIf
-		
-		;make sure the hallway doesn't go outside the array
-		If x+width > MapWidth-3 Then
-			;x = -width+MapWidth-4
-			
-			width=MapWidth-3-x
-		ElseIf x+width < 2
-			
-			;x = 3-width
-			width=-x+2
-		EndIf
-		
-		x = Min(x, x + width)
-		width = Abs(width)
-		For i = x To x + width
-			MapTemp(Min(i,MapWidth), y) = True
-		Next
-		
-		Local height% = Rand(3, 4)
-		If y - height < 1 Then height = y-1
-		
-		Local yhallways% = Rand(4,5)
-		
-		If GetZone(y-height)<>GetZone(y-height+1) Then height=height-1
-		
-		Local temp
-		For i = 1 To yhallways
-			
-			Local x2% = Max(Min(Rand(x, x + width-1),MapWidth-2),2)
-			While MapTemp(x2, y - 1) Or MapTemp(x2 - 1, y - 1) Or MapTemp(x2 + 1, y - 1)
-				x2=x2+1
-			Wend
-			
-			If x2<x+width Then
-				Local tempheight
-				If i = 1 Then
-					tempheight = height 
-					If Rand(2)=1 Then x2 = x Else x2 = x+width
-				Else
-					tempheight = Rand(1,height)
-				EndIf
-				
-				For y2 = y - tempheight To y
-					If GetZone(y2)<>GetZone(y2+1) Then ;a room leading from zone to another
-						MapTemp(x2, y2) = 255
-					Else
-						MapTemp(x2, y2) = True
-					EndIf
-				Next
-				
-				If tempheight = height Then temp = x2
-			End If
-			
-		Next
-		
-		x = temp
-		y = y - height
-	Until y < 2
-End Function
-
-Function CountRooms()
-	Dim RoomAmounts(ROOM4 + 1, ZONEAMOUNT)
-
-	For y = 1 To MapHeight - 1
-		Local zone% = GetZone(y)
-		
-		For x = 1 To MapWidth - 1
-			If MapTemp(x, y) > 0 Then
-				Local temp = Min(MapTemp(x + 1, y),1) + Min(MapTemp(x - 1, y),1)
-				temp = temp + Min(MapTemp(x, y + 1),1) + Min(MapTemp(x, y - 1),1)			
-				If MapTemp(x,y)<255 Then MapTemp(x, y) = temp
-				Select MapTemp(x,y)
-					Case 1
-						RoomAmounts(ROOM1, zone)=RoomAmounts(ROOM1, zone)+1
-					Case 2
-						If Min(MapTemp(x + 1, y),1) + Min(MapTemp(x - 1, y),1)= 2 Then
-							RoomAmounts(ROOM2, zone)=RoomAmounts(ROOM2, zone)+1	
-						ElseIf Min(MapTemp(x, y + 1),1) + Min(MapTemp(x , y - 1),1)= 2
-							RoomAmounts(ROOM2, zone)=RoomAmounts(ROOM2, zone)+1	
-						Else
-							RoomAmounts(ROOM2C, zone) = RoomAmounts(ROOM2C, zone)+1
-						EndIf
-					Case 3
-						RoomAmounts(ROOM3, zone)=RoomAmounts(ROOM3, zone)+1
-					Case 4
-						RoomAmounts(ROOM4, zone)=RoomAmounts(ROOM4, zone)+1
-				End Select
-			EndIf
-		Next
-	Next
-End Function
-
-Function ForceRooms()
-	Local y_min%, y_max%, x_min%, x_max%
-
-	Local forceRoom1 = GetModdedINIInt(MapOptions, "facility", "force room1")
-
-	;force more room1s (if needed)
-	For i = 0 To 2
-		Local temp = -RoomAmounts(ROOM1, i)+forceRoom1
-		
-		If temp > 0 Then
-			
-			If i = 2 Then y_min = 1 Else y_min = I_Zone\Transition[i]
-			If i = 0 Then y_max = MapHeight - 2 Else y_max = I_Zone\Transition[i - 1] - 1
-			x_min = 1
-			x_max = MapWidth - 2
-			
-			For y = y_min To y_max
-				For x = x_min To x_max
-					If MapTemp(x, y) = 0 Then
-						
-						If (Min(MapTemp(x + 1, y),1) + Min(MapTemp(x - 1, y),1) + Min(MapTemp(x, y + 1),1) + Min(MapTemp(x, y - 1),1)) = 1 Then
-							;If Rand(4)=1 Then
-							
-							Local x2, y2
-							If MapTemp(x + 1, y) Then
-								x2 = x+1 : y2 = y
-							ElseIf MapTemp(x - 1, y)
-								x2 = x-1 : y2 = y
-							ElseIf MapTemp(x, y+1)
-								x2 = x : y2 = y+1	
-							ElseIf MapTemp(x, y-1)
-								x2 = x : y2 = y-1
-							EndIf
-							
-							Local placed = False
-							If MapTemp(x2,y2)>1 And MapTemp(x2,y2)<4 And (y<y_max Or y2<y Or i=0) Then
-								Select MapTemp(x2,y2)
-									Case 2
-										If Min(MapTemp(x2 + 1, y2),1) + Min(MapTemp(x2 - 1, y2),1)= 2 Then
-											RoomAmounts(ROOM2, i)=RoomAmounts(ROOM2, i)-1
-											RoomAmounts(ROOM3, i)=RoomAmounts(ROOM3, i)+1
-											placed = True
-										ElseIf Min(MapTemp(x2, y2 + 1),1) + Min(MapTemp(x2, y2 - 1),1)= 2
-											RoomAmounts(ROOM2, i)=RoomAmounts(ROOM2, i)-1
-											RoomAmounts(ROOM3, i)=RoomAmounts(ROOM3, i)+1
-											placed = True
-										EndIf
-									Case 3
-										RoomAmounts(ROOM3, i)=RoomAmounts(ROOM3, i)-1
-										RoomAmounts(ROOM4, i)=RoomAmounts(ROOM4, i)+1	
-										placed = True
-								End Select
-								
-								If placed Then
-									MapTemp(x2,y2)=MapTemp(x2,y2)+1
-									
-									MapTemp(x, y) = 1
-									RoomAmounts(ROOM1, i) = RoomAmounts(ROOM1, i)+1	
-									
-									temp=temp-1
-								EndIf
-							EndIf
-						EndIf
-						
-					EndIf
-					If temp = 0 Then Exit
-				Next
-				If temp = 0 Then Exit
-			Next
-		EndIf
-	Next
-	
-	Local forceRoom4 = GetModdedINIInt(MapOptions, "facility", "force room4")
-	Local forceRoom2c = GetModdedINIInt(MapOptions, "facility", "force room2c")
-
-	;force more room4s and room2Cs
-	For i = 0 To 2
-		
-		If i = 2 Then y_min = 1 Else y_min = I_Zone\Transition[i]
-		If i = 0 Then y_max = MapHeight - 2 Else y_max = I_Zone\Transition[i - 1] - 2
-		x_min = 1
-		x_max = MapWidth - 2
-		
-		temp = -RoomAmounts(ROOM4, i)+forceRoom4
-
-		If temp > 0 Then
-			DebugLog "forcing a ROOM4 into zone "+i
-			temp=0
-			
-			For y = y_min To y_max
-				For x = x_min To x_max
-					If MapTemp(x,y)=3 Then
-						placed=False
-						Select 1 ;see if adding a ROOM4 is possible
-							Case (x<>x_max And MapTemp(x+1,y)+MapTemp(x+1,y+1)+MapTemp(x+1,y-1)+MapTemp(x+2,y)=0)
-								MapTemp(x+1,y)=1
-								placed=True
-							Case (x<>x_min And MapTemp(x-1,y)+MapTemp(x-1,y+1)+MapTemp(x-1,y-1)+MapTemp(x-2,y)=0)
-								MapTemp(x-1,y)=1
-								placed=True
-							Case ((i<>0 Lor y<>y_max) And MapTemp(x,y+1)+MapTemp(x+1,y+1)+MapTemp(x-1,y+1)+MapTemp(x,y+2)=0)
-								MapTemp(x,y+1)=1
-								placed=True
-							Case ((i=2 Lor y<>y_min) And MapTemp(x,y-1)+MapTemp(x+1,y-1)+MapTemp(x-1,y-1)+MapTemp(x,y-2)=0)
-								MapTemp(x,y-1)=1
-								placed=True
-						End Select
-						If placed Then
-							MapTemp(x,y)=4 ;turn this room into a ROOM4
-							DebugLog "ROOM4 forced into slot ("+x+", "+y+")"
-							RoomAmounts(ROOM4, i)=RoomAmounts(ROOM4, i)+1
-							RoomAmounts(ROOM3, i)=RoomAmounts(ROOM3, i)-1
-							RoomAmounts(ROOM1, i)=RoomAmounts(ROOM1, i)+1
-							temp = temp - 1
-						EndIf
-					EndIf
-					If temp=0 Then Exit
-				Next
-				If temp=0 Then Exit
-			Next
-			
-			If temp>0 Then DebugLog "Couldn't place all ROOM4s in zone "+i
-		EndIf
-		
-		temp = -RoomAmounts(ROOM2C, i)+forceRoom2c
-
-		If temp>0 Then
-			DebugLog "forcing a ROOM2C into zone "+i
-
-			For y = y_max To y_min Step -1
-				For x = x_min To x_max
-					If MapTemp(x,y)=1 Then
-						placed=False
-						Select True ;see if adding some rooms is possible
-							Case MapTemp(x-1,y)>0
-								If (MapTemp(x+1,y-1)+MapTemp(x+1,y+1)+MapTemp(x+2,y))=0 And x<x_max Then
-									If (MapTempSafe(x+1,y-2)+MapTemp(x+2,y-1))=0 And (y>y_min Or i=2) Then
-										MapTemp(x,y)=2
-										MapTemp(x+1,y)=2
-										DebugLog "ROOM2C forced into slot ("+(x+1)+", "+(y)+")"
-										MapTemp(x+1,y-1)=1
-										placed=True
-									Else If (MapTemp(x+1,y+2)+MapTemp(x+2,y+1))=0 And (y<y_max Or i>0) Then
-										MapTemp(x,y)=2
-										MapTemp(x+1,y)=2
-										DebugLog "ROOM2C forced into slot ("+(x+1)+", "+(y)+")"
-										MapTemp(x+1,y+1)=1
-										placed=True
-									EndIf
-								EndIf
-							Case MapTemp(x+1,y)>0
-								If (x-2<0 Lor MapTemp(x-2,y)=0) And (MapTemp(x-1,y-1)+MapTemp(x-1,y+1))=0 And x>x_min Then
-									If (x-2<0 Lor MapTemp(x-2,y-1)=0) And MapTempSafe(x-1,y-2)=0 And (y>y_min Or i=2) Then
-										MapTemp(x,y)=2
-										MapTemp(x-1,y)=2
-										DebugLog "ROOM2C forced into slot ("+(x-1)+", "+(y)+")"
-										MapTemp(x-1,y-1)=1
-										placed=True
-									Else If (x-2<0 Lor MapTemp(x-2,y+1)=0) And MapTemp(x-1,y+2)=0 And (y<y_max Or i>0) Then
-										MapTemp(x,y)=2
-										MapTemp(x-1,y)=2
-										DebugLog "ROOM2C forced into slot ("+(x-1)+", "+(y)+")"
-										MapTemp(x-1,y+1)=1
-										placed=True
-									EndIf
-								EndIf
-							Case MapTemp(x,y-1)>0
-								If (MapTemp(x-1,y+1)+MapTemp(x+1,y+1)+MapTemp(x,y+2))=0 And (y<y_max Or i>0) Then
-									If (x-2<0 Lor MapTemp(x-2,y+1)=0) And MapTemp(x-1,y+2)=0 And x>x_min Then
-										MapTemp(x,y)=2
-										MapTemp(x,y+1)=2
-										DebugLog "ROOM2C forced into slot ("+(x)+", "+(y+1)+")"
-										MapTemp(x-1,y+1)=1
-										placed=True
-									Else If (MapTemp(x+2,y+1)+MapTemp(x+1,y+2))=0 And x<x_max Then
-										MapTemp(x,y)=2
-										MapTemp(x,y+1)=2
-										DebugLog "ROOM2C forced into slot ("+(x)+", "+(y+1)+")"
-										MapTemp(x+1,y+1)=1
-										placed=True
-									EndIf
-								EndIf
-							Case MapTemp(x,y+1)>0
-								If (MapTemp(x-1,y-1)+MapTemp(x+1,y-1)+MapTempSafe(x,y-2))=0 And (y>y_min Or i=2) Then
-									If (x-2<0 Lor MapTemp(x-2,y-1)=0) And MapTempSafe(x-1,y-2)=0 And x>x_min Then
-										MapTemp(x,y)=2
-										MapTemp(x,y-1)=2
-										DebugLog "ROOM2C forced into slot ("+(x)+", "+(y-1)+")"
-										MapTemp(x-1,y-1)=1
-										placed=True
-									Else If (MapTemp(x+2,y-1)+MapTempSafe(x+1,y-2))=0 And x<x_max Then
-										MapTemp(x,y)=2
-										MapTemp(x,y-1)=2
-										DebugLog "ROOM2C forced into slot ("+(x)+", "+(y-1)+")"
-										MapTemp(x+1,y-1)=1
-										placed=True
-									EndIf
-								EndIf
-						End Select
-						If placed Then
-							RoomAmounts(ROOM2C, i)=RoomAmounts(ROOM2C, i)+1
-							RoomAmounts(ROOM2, i)=RoomAmounts(ROOM2, i)+1
-							temp = temp - 1
-						EndIf
-					EndIf
-					If temp=0 Then Exit
-				Next
-				If temp=0 Then Exit
-			Next
-			
-			If temp>0 Then DebugLog "Couldn't place all ROOM2C in zone "+i
-		EndIf
-		
-	Next
-End Function
-
-Function InitializeRoomRanges()
-	Local MaxRooms% = 55*MapWidth/20
-	For rs = ROOM1 To ROOM4
-		MaxRooms=Max(MaxRooms, RoomAmounts(rs, 0)+RoomAmounts(rs, 1)+RoomAmounts(rs, 2)+1)
-	Next
-	Dim MapRoom$(ROOM4 + 1, MaxRooms)
-
-	Dim MinPositions%(ROOM4 + 1, ZONEAMOUNT)
-	Dim MaxPositions%(ROOM4 + 1, ZONEAMOUNT)
-	For rs = ROOM1 To ROOM4
-		For z = 0 To ZONEAMOUNT-1
-			MinPositions(rs, z) = 0
-			MaxPositions(rs, z) = RoomAmounts(rs, 0)
-			If z > 0 Then
-				MinPositions(rs, z) = MinPositions(rs, z) + RoomAmounts(rs, 0)
-				MaxPositions(rs, z) = MaxPositions(rs, z) + RoomAmounts(rs, 1)
-			EndIf
-			If z > 1 Then
-				MinPositions(rs, z) = MinPositions(rs, z) + RoomAmounts(rs, 1)
-				MaxPositions(rs, z) = MaxPositions(rs, z) + RoomAmounts(rs, 2)
-			EndIf
-		Next
-	Next
-End Function
-
-Function SetRooms()
-	MapRoom(ROOM1, 0) = "start"	
-	
-	MapRoom(ROOM1, MaxPositions(ROOM1, 2)-2) = "exit1"
-	MapRoom(ROOM1, MaxPositions(ROOM1, 2)-1) = "gateaentrance"
-	
-	For rt.RoomTemplates = Each RoomTemplates
-		If rt\SetRoom >= 0 Then
-			For i% = 0 To ZONEAMOUNT-1
-				Local zone% = rt\zone[i]
-				If zone <> 0 Then
-					zone = zone - 1
-					Local start% = MinPositions(rt\Shape, zone)
-					SetRoom(rt\Name, rt\Shape, start+Floor(rt\SetRoom*Float(RoomAmounts(rt\Shape, zone))),start,MaxPositions(rt\Shape, zone))
-				EndIf
-			Next
-
-		EndIf
-	Next
-End Function
 
 
-Function MTAdjustAngle%(angle%, shape%)
-	If angle <> 90 And angle <> 270 Then angle = angle + 180
-	If shape = ROOM2C Or shape = ROOM3 Then angle = angle - 90
-	Return WrapAngle(angle)
-End Function
 
-Function MTNameToShape%(name$)
-	Select Lower(name$)
-		Case "maintenance tunnel endroom", "maintenance tunnel generator room"
-			Return ROOM1
-		Case "maintenance tunnel corridor", "maintenance tunnel elevator"
-			Return ROOM2
-		Case "maintenance tunnel corner"
-			Return ROOM2C
-		Case "maintenance tunnel t-shaped room"
-			Return ROOM3
-		Case "maintenance tunnel 4-way room"
-			Return ROOM4
-	End Select
-	Return ROOM1
-End Function
 
 ; This is fairly shitty.. but it's the 59 room layout from cbmap2 temporarily, until i find a better solution to map gen
-Function CreateMTFloor()
-	Local f% = ReadFile("Data\mtlayout.txt")
-	If f = 0 Then RuntimeErrorExt "Data\mtlayout.txt not found."
 
-	Local l$, n$, x%, y%, ang%, shape%, zone%
-	Local r.Rooms
-	MTStartRoom = Null
 
-	While Not Eof(f)
-		l$ = Trim(ReadLine(f))
-		If l$ <> ""
-			x = Int(Piece$(l$, 1, ","))
-			y = Int(Piece$(l$, 2, ","))
-			n$ = Piece$(l$, 3, ",")
-			ang = Int(Piece$(l$, 4, ",")) * 90
-			shape = MTNameToShape(n$)
-			zone = GetZone(y)
-
-			ang = MTAdjustAngle(ang, shape)
-
-			r = CreateRoom(zone, shape, (MT_GRID_SIZE - x) * spacing, 0, y * spacing, ang, n$)
-			If r <> Null Then
-				If MTStartRoom = Null Then MTStartRoom = r
-				If Lower(n$) = "maintenance tunnel endroom" Then MTStartRoom = r
-			EndIf
-		EndIf
-	Wend
-
-	CloseFile f
-End Function
-
-Function CreateRooms(loadingstart, loadingcount#)
-	CreateMTFloor()
-End Function
-
-Function DrawDebugMap()
-	For x = 0 To MapWidth - 1
-		For y = 0 To MapHeight - 1
-			MapName(x,y) = ""
-		Next
-	Next
-	For r.Rooms = Each Rooms
-		If r\RoomTemplate\SetRoom => 0 Then MapName(r\x/8,r\z/8) = r\RoomTemplate\Name
-	Next
-	
-	Repeat
-		Cls
-
-		Local tileSize = Max(Min(32 * HUDScale, Min(GraphicWidth / MapWidth, (GraphicHeight - 50) / MapHeight)), 3)
-		Local totalWidth = MapWidth * tileSize - 2, totalHeight = MapHeight * tileSize - 2
-		Local xStart = GraphicWidth / 2 - totalWidth / 2, yStart = GraphicHeight / 2 - totalHeight / 2 - 50 * HUDScale
-
-		For x = 0 To MapWidth - 1
-			For y = 0 To MapHeight - 1
-				Local mirroredX% = MapWidth - x
-				If MapTemp(x, y) = 0 Then
-					
-					Local zone=GetZone(y)
-					
-					Color 25+50*zone, 25+50*zone, 25+50*zone
-					Rect(xStart + mirroredX * tileSize, yStart + y * tileSize, tileSize - 2, tileSize - 2)
-				Else
-					If MapTemp(x, y) = 255 Then
-						Color 0,200,0
-					Else If MapTemp(x,y)=4 Then
-						Color 50,50,255
-					Else If MapTemp(x,y)=3 Then
-						Color 50,255,255
-					Else If MapTemp(x,y)=2 Then
-						Color 255,255,50
-					Else
-						Color 255, 255, 255
-					EndIf
-					Rect(xStart + mirroredX * tileSize, yStart + y * tileSize, tileSize - 2, tileSize - 2)
-				End If
-			Next
-		Next	
-		
-		For x = 0 To MapWidth - 1
-			For y = 0 To MapHeight - 1
-				mirroredX% = MapWidth - x
-				If MouseX()>xStart + mirroredX*tileSize And MouseX()<xStart + mirroredX*tileSize+tileSize Then
-					If MouseY()>yStart + y*tileSize And MouseY()<yStart + y*tileSize+tileSize Then
-						Color 255, 0, 0
-					Else
-						Color 200, 200, 200
-					EndIf
-				Else
-					Color 200, 200, 200
-				EndIf
-				
-				If MapTemp(x, y) > 0 Then
-					Text xStart + mirroredX * tileSize +2, yStart + y * tileSize + 2,MapName(x,y)
-				End If
-			Next
-		Next
-
-		If Fullscreen Then DrawImage(CursorIMG,ScaledMouseX(),ScaledMouseY())
-		Color 255, 255, 255
-		Text(GraphicWidth / 2, GraphicHeight - 25 * HUDScale, I_Loc\Menu_Pressany, True, True)
-		
-		Flip
-	Until GetKey() <> 0
-	FlushKeys()
-End Function
 
 
 Function ConnectAdjacentRooms(r.Rooms)
@@ -3514,7 +3022,13 @@ Function ConnectAdjacentRooms(r.Rooms)
 End Function
 
 Function CreateMap(loadingstart,loadingcount#)
-	DebugLog ("Generating a map using the seed "+GetRandomSeed())
+	DebugLog ("Loading level")
+
+	PlayerDowned = False
+	PlayerDead = False
+	DownTimer = 0.0
+	ReviveProgress = 0.0
+	UnableToMove = False
 	
 	MapWidth% = GetModdedINIInt(MapOptions, "facility", "width")
 	MapHeight% = GetModdedINIInt(MapOptions, "facility", "height")
@@ -3523,87 +3037,16 @@ Function CreateMap(loadingstart,loadingcount#)
 	I_Zone\Transition[1] = Floor(MapHeight * (1.0 / 3.0)) + 1
 	I_Zone\HasCustomForest = False
 	I_Zone\HasCustomMT = False
-	
-	SeedRnd GetRandomSeed()
-	
-	Dim MapTemp%(MapWidth+1, MapHeight+1)
-	Dim MapFound%(MapWidth+1, MapHeight+1)
-	Dim MapName$(MapWidth, MapHeight)
-	
-	Dim MapRoomID%(ROOM4 + 1)
-	
-	CreateMapLayout()
-	CountRooms()
-	ForceRooms()
-	
-	InitializeRoomRanges()
-	SetRooms()
 
-	CreateRooms(loadingstart,loadingcount#)
+	If BuildLevel%(CurrentLevel$) = 0 Then Return
+
 	For r.Rooms = Each Rooms
 		SetupTriggerBoxes(r)
-	Next
-	
-	If DebugMapGen Then DrawDebugMap()
-	
-	For y = 0 To MapHeight
-		For x = 0 To MapWidth
-			MapTemp(x, y) = Min(MapTemp(x, y),1)
-		Next
 	Next
 
 	For r.Rooms = Each Rooms
 		ConnectAdjacentRooms(r)
 	Next
-End Function
-
-; Really, really stupid bandaid fix!
-; We basically need to allow the room2c forcing to consider extending rooms on y=1, which means they'll be pushed
-; up to y=0. This requires bounds checking for a select amount of checks that deal with checking y-1.
-Function MapTempSafe(x%,y%)
-	If x<0 Or y<0 Or x>MapWidth Or y>MapHeight Then Return 0
-	Return MapTemp(x,y)
-End Function
-
-Function SetRoom(room_name$,room_type%,pos%,min_pos%,max_pos%) ;place a room without overwriting others
-	
-	If max_pos<=min_pos Then DebugLog "Can't place "+room_name : Return False
-	
-	DebugLog "--- SETROOM: "+Upper(room_name)+" ---" + min_pos + " " + max_pos
-	Local placed% = False
-	If pos>=(min_pos+max_pos)/2 Then
-		placed = SetRoomUpper(room_name,room_type,pos,max_pos) Lor SetRoomLower(room_name,room_type,pos-1,min_pos)
-	Else
-		placed = SetRoomLower(room_name,room_type,pos,min_pos) Lor SetRoomUpper(room_name,room_type,pos+1,max_pos)
-	EndIf
-
-	If placed Then DebugLog "--------------" Else DebugLog "couldn't place "+room_name
-End Function
-
-Function SetRoomUpper(room_name$,room_type%,pos%,max_pos%)
-	If pos>=max_pos Return False
-	While MapRoom(room_type,pos)<>""
-		DebugLog "found "+MapRoom(room_type,pos)
-		pos=pos+1
-		If pos>=max_pos Then
-			Return False
-		EndIf
-	Wend
-	MapRoom(room_type,pos)=room_name
-	Return True
-End Function
-
-Function SetRoomLower(room_name$,room_type%,pos%,min_pos%)
-	If pos<min_pos Return False
-	While MapRoom(room_type,pos)<>""
-		DebugLog "found "+MapRoom(room_type,pos) + " " + pos
-		pos=pos-1
-		If pos<min_pos Then
-			Return False
-		EndIf
-	Wend
-	MapRoom(room_type,pos)=room_name
-	Return True
 End Function
 
 Function GetZone(y%)

@@ -1,0 +1,10 @@
+size
+
+- multiplayer campaigns should have around 2 big levels at most, with plenty of separate levelportals to avoid having people reconnect just to go through a few corridors
+
+culling
+
+- !!!!!!avoid long straight sightlines and use corners!!!!!!!
+- !!!!!!don't put an entire wing into one mesh!!!!!!!!
+- each room should have its own exported (from 3D cursor origin) mesh so it can be culled separately
+- every doorway leading to a bunch of shit needs a levelportal
